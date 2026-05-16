@@ -1617,30 +1617,33 @@ async function saveQuote() {
   const name = (payload.client.clientFirst + ' ' + payload.client.clientLast).trim() || 'Unnamed Quote';
   const total = calcAll();
   const key = 'PXT-' + Date.now();
+  const date = new Date().toLocaleDateString('en-AU');
+  const ref = payload.client.quoteRef;
+  const address = payload.client.clientAddress;
 
-  // Show saving indicator
   const btn = document.querySelector('.price-bar .btn-icon.gold');
   if (btn) { btn.textContent = '⏳ Saving...'; btn.disabled = true; }
 
   try {
-    const res = await fetch(SHEET_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'save', key, name,
-        address: payload.client.clientAddress,
-        total, date: new Date().toLocaleDateString('en-AU'),
-        ref: payload.client.quoteRef,
-        payload
-      })
+    const params = new URLSearchParams({
+      action: 'save',
+      key, name, address, total, date, ref,
+      payload: JSON.stringify(payload)
     });
-    alert('✅ Quote saved: ' + name);
+    const res = await fetch(SHEET_URL + '?' + params.toString());
+    const data = await res.json();
+    if (data.status === 'saved') {
+      alert('✅ Quote saved: ' + name);
+    } else {
+      throw new Error(data.message || 'Unknown error');
+    }
   } catch(e) {
     // Fallback to localStorage
     localStorage.setItem(key, JSON.stringify(payload));
     const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
-    saves.push({ key, name, address: payload.client.clientAddress, total, date: new Date().toLocaleDateString('en-AU'), ref: payload.client.quoteRef });
+    saves.push({ key, name, address, total, date, ref });
     localStorage.setItem('poxit_saves', JSON.stringify(saves));
-    alert('✅ Saved locally (offline mode)');
+    alert('✅ Saved locally (offline mode) — ' + e.message);
   } finally {
     if (btn) { btn.textContent = '💾 Save'; btn.disabled = false; }
   }
@@ -1652,10 +1655,7 @@ async function openSaveLoad() {
   document.getElementById('saveModal').classList.add('open');
 
   try {
-    const res = await fetch(SHEET_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'load' })
-    });
+    const res = await fetch(SHEET_URL + '?action=load');
     const data = await res.json();
     const quotes = (data.quotes || []).filter(q => q.key && q.name).reverse();
 
@@ -1696,14 +1696,14 @@ async function loadQuote(key) {
   list.innerHTML = '<div class="text-muted" style="padding:16px 0; font-size:13px;">⏳ Loading quote...</div>';
 
   try {
-    const res = await fetch(SHEET_URL, { method: 'POST', body: JSON.stringify({ action: 'load' }) });
+    const res = await fetch(SHEET_URL + '?action=load');
     const data = await res.json();
     const quote = (data.quotes || []).find(q => q.key === key);
     if (!quote) return alert('Quote not found.');
     const payload = typeof quote.payload === 'string' ? JSON.parse(quote.payload) : quote.payload;
     restoreQuote(payload);
   } catch(e) {
-    alert('Could not load quote. Try again.');
+    alert('Could not load quote: ' + e.message);
   }
   closeSaveLoad();
 }
