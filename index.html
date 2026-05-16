@@ -429,6 +429,7 @@
   <div class="tab" onclick="showTab('joints')">📐 Joints</div>
   <div class="tab" onclick="showTab('careplan')">♻️ Care</div>
   <div class="tab" onclick="showTab('summary')">💰 Summary</div>
+  <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Reset</div>
 </div>
 
 <div class="content">
@@ -2119,6 +2120,69 @@ function copyViz() {
     document.body.removeChild(ta);
     alert('✅ Prompt copied!');
   });
+}
+
+// =============================================
+//  RESET
+// =============================================
+function confirmReset() {
+  if (!confirm('Reset the tool and start a new quote? All unsaved data will be lost.')) return;
+
+  // Clear client fields
+  ['clientFirst','clientLast','clientPhone','clientEmail','clientAddress','quoteDate','quoteValid','quoteRef','internalNotes','clientNotes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+
+  // Remove all dynamic zones
+  document.getElementById('floorZones').innerHTML = '';
+  document.getElementById('crackList').innerHTML = '';
+  document.getElementById('sealantZones').innerHTML = '';
+  document.getElementById('grindZones').innerHTML = '';
+  document.getElementById('jointList').innerHTML = '';
+  document.getElementById('careZones').innerHTML = '';
+
+  // Reset spalling fields
+  ['spalSmall','spalMed','spalLarge','spalArea'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = 0;
+  });
+
+  // Reset trip hazards and expansion joints
+  ['tripHazards','expJoints'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = 0;
+  });
+
+  // Reset counters
+  floorZoneCount = 0;
+  crackCount = 0;
+  sealantZoneCount = 0;
+  grindZoneCount = 0;
+  jointCount = 0;
+  careZoneCount = 0;
+
+  // Reset pricing toggle
+  showPricingBreakdown = false;
+  const btn = document.getElementById('pricingToggleBtn');
+  const lbl = document.getElementById('pricingModeLabel');
+  if (btn) { btn.textContent = '🔍 Show Prices'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
+  if (lbl) { lbl.textContent = 'OFF'; lbl.style.color = 'var(--red)'; }
+
+  // Set fresh date and new quote ref
+  const today = new Date();
+  const fmt = d => d.toLocaleDateString('en-AU');
+  const validDate = new Date(today);
+  validDate.setDate(validDate.getDate() + 30);
+  document.getElementById('quoteDate').value = fmt(today);
+  document.getElementById('quoteValid').value = fmt(validDate);
+  const num = (parseInt(localStorage.getItem('poxit_quote_num') || '0') + 1);
+  localStorage.setItem('poxit_quote_num', num);
+  document.getElementById('quoteRef').value = 'PXT-' + today.getFullYear() + '-' + String(num).padStart(3, '0');
+
+  // Go to client tab and recalc
+  showTab('client');
+  calcAll();
 }
 
 // =============================================
