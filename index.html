@@ -1337,7 +1337,8 @@ function calcAll() {
     if (!document.getElementById('row-' + id)) continue;
     const rate = parseFloat(document.getElementById('gztype-' + id)?.value) || 40;
     const area = parseFloat(document.getElementById('gzarea-' + id)?.value) || 0;
-    grindTotal += area * rate;
+    const mvb = document.getElementById('gzmvb-' + id)?.checked ? area * 20 : 0;
+    grindTotal += (area * rate) + mvb;
   }
   const tripH = parseInt(document.getElementById('tripHazards')?.value) || 0;
   const expJ = parseInt(document.getElementById('expJoints')?.value) || 0;
@@ -2085,10 +2086,14 @@ function generatePDF() {
 </body>
 </html>`;
 
-  // Inject into a blob URL and open — works in Safari on iPhone
+  // Open in new tab
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  window.location.href = url;
+  const newTab = window.open(url, '_blank');
+  if (!newTab) {
+    // Fallback if popup blocked — load in same tab
+    window.location.href = url;
+  }
 }
 
 // =============================================
