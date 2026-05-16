@@ -755,37 +755,89 @@ function selectPill(groupName, value, el) {
 // =============================================
 //  SHAPE CALCULATOR
 // =============================================
-function calcShape(zoneId) {
-  const shape = document.getElementById('shape-' + zoneId).value;
-  let area = 0;
+// =============================================
+//  MULTI-SHAPE AREA CALCULATOR
+// =============================================
+const shapeCounters = {};
+
+function addShape(zoneId) {
+  if (!shapeCounters[zoneId]) shapeCounters[zoneId] = 0;
+  shapeCounters[zoneId]++;
+  const sid = zoneId + '_s' + shapeCounters[zoneId];
+  const container = document.getElementById('shapes-' + zoneId);
+  const div = document.createElement('div');
+  div.id = 'shaperow-' + sid;
+  div.style.cssText = 'background:var(--dark);border-radius:8px;padding:10px;margin-bottom:8px;';
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <select id="shtype-${sid}" onchange="renderShapeInputs('${sid}','${zoneId}')" style="flex:1;margin-right:8px;">
+        <option value="rect">Rectangle</option>
+        <option value="tri">Triangle</option>
+        <option value="trap">Trapezoid</option>
+        <option value="circ">Circle</option>
+      </select>
+      <button class="btn-remove" onclick="removeShape('${sid}','${zoneId}')">✕</button>
+    </div>
+    <div id="shinputs-${sid}"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+      <div style="font-size:11px;color:var(--muted);">Area</div>
+      <div style="font-family:'DM Mono',monospace;font-size:14px;color:var(--gold);" id="shresult-${sid}">0.00 m²</div>
+    </div>
+  `;
+  container.appendChild(div);
+  renderShapeInputs(sid, zoneId);
+}
+
+function renderShapeInputs(sid, zoneId) {
+  const shape = document.getElementById('shtype-' + sid)?.value || 'rect';
+  const container = document.getElementById('shinputs-' + sid);
+  if (!container) return;
   if (shape === 'rect') {
-    const l = parseFloat(document.getElementById('s1-' + zoneId).value) || 0;
-    const w = parseFloat(document.getElementById('s2-' + zoneId).value) || 0;
-    area = l * w;
+    container.innerHTML = `<div class="row"><div class="field"><label>Length (m)</label><input type="number" id="sh1-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div><div class="field"><label>Width (m)</label><input type="number" id="sh2-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div></div>`;
   } else if (shape === 'tri') {
-    const b = parseFloat(document.getElementById('s1-' + zoneId).value) || 0;
-    const h = parseFloat(document.getElementById('s2-' + zoneId).value) || 0;
-    area = 0.5 * b * h;
+    container.innerHTML = `<div class="row"><div class="field"><label>Base (m)</label><input type="number" id="sh1-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div><div class="field"><label>Height (m)</label><input type="number" id="sh2-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div></div>`;
   } else if (shape === 'trap') {
-    const a = parseFloat(document.getElementById('s1-' + zoneId).value) || 0;
-    const b2 = parseFloat(document.getElementById('s2-' + zoneId).value) || 0;
-    const h2 = parseFloat(document.getElementById('s3-' + zoneId).value) || 0;
-    area = 0.5 * (a + b2) * h2;
+    container.innerHTML = `<div class="row"><div class="field"><label>Side A (m)</label><input type="number" id="sh1-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div><div class="field"><label>Side B (m)</label><input type="number" id="sh2-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div></div><div class="field"><label>Height (m)</label><input type="number" id="sh3-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div>`;
   } else if (shape === 'circ') {
-    const r = parseFloat(document.getElementById('s1-' + zoneId).value) || 0;
-    area = Math.PI * r * r;
+    container.innerHTML = `<div class="field"><label>Radius (m)</label><input type="number" id="sh1-${sid}" step="0.1" min="0" oninput="calcShapeArea('${sid}','${zoneId}')"></div>`;
   }
+  calcShapeArea(sid, zoneId);
+}
+
+function calcShapeArea(sid, zoneId) {
+  const shape = document.getElementById('shtype-' + sid)?.value || 'rect';
+  const v1 = parseFloat(document.getElementById('sh1-' + sid)?.value) || 0;
+  const v2 = parseFloat(document.getElementById('sh2-' + sid)?.value) || 0;
+  const v3 = parseFloat(document.getElementById('sh3-' + sid)?.value) || 0;
+  let area = 0;
+  if (shape === 'rect') area = v1 * v2;
+  else if (shape === 'tri') area = 0.5 * v1 * v2;
+  else if (shape === 'trap') area = 0.5 * (v1 + v2) * v3;
+  else if (shape === 'circ') area = Math.PI * v1 * v1;
+  const res = document.getElementById('shresult-' + sid);
+  if (res) res.textContent = area.toFixed(2) + ' m²';
+  recalcTotalArea(zoneId);
+}
+
+function recalcTotalArea(zoneId) {
+  const container = document.getElementById('shapes-' + zoneId);
+  if (!container) return;
+  let total = 0;
+  container.querySelectorAll('[id^="shresult-"]').forEach(el => {
+    total += parseFloat(el.textContent) || 0;
+  });
   const areaInput = document.getElementById('area-' + zoneId);
-  if (areaInput && area > 0) areaInput.value = area.toFixed(2);
+  if (areaInput) areaInput.value = total.toFixed(2);
+  // Update the total display
+  const totalEl = document.getElementById('shapetotal-' + zoneId);
+  if (totalEl) totalEl.textContent = total.toFixed(2) + ' m²';
   calcAll();
 }
 
-function getShapeFields(shape, zoneId) {
-  if (shape === 'rect') return `<div class="row"><div class="field"><label>Length (m)</label><input type="number" id="s1-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div><div class="field"><label>Width (m)</label><input type="number" id="s2-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div></div>`;
-  if (shape === 'tri') return `<div class="row"><div class="field"><label>Base (m)</label><input type="number" id="s1-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div><div class="field"><label>Height (m)</label><input type="number" id="s2-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div></div>`;
-  if (shape === 'trap') return `<div class="row"><div class="field"><label>Side A (m)</label><input type="number" id="s1-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div><div class="field"><label>Side B (m)</label><input type="number" id="s2-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div></div><div class="field"><label>Height (m)</label><input type="number" id="s3-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div>`;
-  if (shape === 'circ') return `<div class="field"><label>Radius (m)</label><input type="number" id="s1-${zoneId}" step="0.1" oninput="calcShape('${zoneId}')"></div>`;
-  return '';
+function removeShape(sid, zoneId) {
+  const el = document.getElementById('shaperow-' + sid);
+  if (el) el.remove();
+  recalcTotalArea(zoneId);
 }
 
 // =============================================
@@ -833,21 +885,21 @@ function addFloorZone() {
         </div>
       </div>
 
-      <!-- AREA CALCULATOR -->
+      <!-- MULTI-SHAPE AREA CALCULATOR -->
       <div class="field">
-        <label>Area Calculator</label>
-        <select id="shape-${id}" onchange="updateShapeCalc('${id}')">
-          <option value="manual">Manual Entry</option>
-          <option value="rect">Rectangle</option>
-          <option value="tri">Triangle</option>
-          <option value="trap">Trapezoid</option>
-          <option value="circ">Circle</option>
-        </select>
-        <div class="shape-calc" id="shapeCalc-${id}" style="display:none;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label style="margin-bottom:0;">Area Calculator</label>
+          <button class="btn-add" style="width:auto;padding:4px 10px;margin:0;font-size:11px;" onclick="addShape('${id}')">＋ Add Shape</button>
+        </div>
+        <div id="shapes-${id}"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:4px;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Total Area</div>
+          <div style="font-family:'DM Mono',monospace;font-size:16px;color:var(--gold);" id="shapetotal-${id}">0.00 m²</div>
+        </div>
       </div>
       <div class="field">
-        <label>Floor Area (m²)</label>
-        <input type="number" id="area-${id}" value="" step="0.5" min="0" oninput="calcAll()" placeholder="0.00">
+        <label>Floor Area (m²) <span style="color:var(--muted);font-size:10px;">— auto-filled by calculator above, or enter manually</span></label>
+        <input type="number" id="area-${id}" value="" step="0.5" min="0" oninput="recalcTotalArea('${id}');calcAll()" placeholder="0.00">
       </div>
 
       <!-- CONCRETE CONDITION -->
@@ -986,13 +1038,7 @@ function toggleLinear(key, num) {
   onToggleAddon(key, id);
 }
 
-function updateShapeCalc(id) {
-  const shape = document.getElementById('shape-' + id).value;
-  const container = document.getElementById('shapeCalc-' + id);
-  if (shape === 'manual') { container.style.display = 'none'; return; }
-  container.style.display = 'block';
-  container.innerHTML = getShapeFields(shape, id);
-}
+
 
 // =============================================
 //  CALC FLOOR ZONE
@@ -1129,7 +1175,7 @@ function addSealantZone() {
         <option value="30">Pressure Wash + Tinted Seal — $30/m²</option>
         <option value="50">Grind + Hard Seal (Gloss) — $50/m²</option>
         <option value="60">Grind + Stone Seal (Matte/Satin) — $60/m²</option>
-        <option value="30aq">AquaSeal Penetrating Sealer — $30/m²</option>
+        <option value="20">AquaSeal Penetrating Sealer — $20/m²</option>
       </select>
     </div>
     <div class="field"><label>Area (m²)</label><input type="number" id="szarea-${id}" value="0" step="0.5" oninput="calcAll()"></div>
@@ -1428,10 +1474,13 @@ function calcAll() {
 }
 
 // =============================================
-//  SAVE / LOAD
+//  SAVE / LOAD — Google Sheets cloud sync
 // =============================================
-function getQuoteData() {
-  return {
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyAubUpqRPXv0L450tHvfaX87pVNiSA36dwd1tKQNCqpsmlU5zU3wqkhjGDnCSzS2yK/exec';
+
+function serialiseQuote() {
+  // Client fields
+  const client = {
     clientFirst: document.getElementById('clientFirst').value,
     clientLast: document.getElementById('clientLast').value,
     clientPhone: document.getElementById('clientPhone').value,
@@ -1442,57 +1491,355 @@ function getQuoteData() {
     quoteRef: document.getElementById('quoteRef').value,
     internalNotes: document.getElementById('internalNotes').value,
     clientNotes: document.getElementById('clientNotes').value,
-    totalExGst: calcAll()
   };
-}
 
-function saveQuote() {
-  const data = getQuoteData();
-  const name = (data.clientFirst + ' ' + data.clientLast).trim() || 'Unnamed Quote';
-  const key = 'poxit_quote_' + Date.now();
-  const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
-  saves.push({ key, name, address: data.clientAddress, total: data.totalExGst, date: new Date().toLocaleDateString('en-AU'), ref: data.quoteRef });
-  localStorage.setItem('poxit_saves', JSON.stringify(saves));
-  localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-  alert('✅ Quote saved: ' + name);
-}
-
-function openSaveLoad() {
-  const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
-  const list = document.getElementById('savedList');
-  if (saves.length === 0) {
-    list.innerHTML = '<div class="text-muted" style="padding:16px 0; font-size:13px;">No saved quotes yet.</div>';
-  } else {
-    list.innerHTML = saves.slice().reverse().map(s => `
-      <div class="save-item" onclick="loadQuote('${s.key}')">
-        <div>
-          <div class="save-item-name">${s.name} ${s.ref ? '· ' + s.ref : ''}</div>
-          <div class="save-item-meta">${s.address || '—'} · ${s.date}</div>
-        </div>
-        <div class="save-item-total">$${Math.round(s.total).toLocaleString()}</div>
-      </div>
-    `).join('');
+  // Floor zones
+  const floors = [];
+  for (let i = 1; i <= floorZoneCount; i++) {
+    const id = 'fz' + i;
+    if (!document.getElementById('card-' + id)) continue;
+    const sysEl = document.querySelector(`[data-group="sys-${id}"].selected`);
+    const flakeEl = document.querySelector(`[data-group="flake-${id}"].selected`);
+    const concEl = document.querySelector(`[data-group="conc-${id}"].selected`);
+    const coatEl = document.querySelector(`[data-group="coat-${id}"].selected`);
+    floors.push({
+      id, num: i,
+      name: document.getElementById('zname-' + id)?.value || '',
+      sys: sysEl?.textContent?.trim() || 'Flake Internal',
+      flake: flakeEl?.textContent?.trim() || 'Standard',
+      flakeUp: flakeEl?.getAttribute('data-up') || '0',
+      conc: concEl?.textContent?.trim() || 'Hard',
+      concUp: concEl?.getAttribute('data-val') || '0',
+      coat: coatEl?.textContent?.trim() || 'None',
+      coatUp: coatEl?.getAttribute('data-val') || '0',
+      shape: document.getElementById('shape-' + id)?.value || 'manual',
+      area: document.getElementById('area-' + id)?.value || '0',
+      nonslip: document.getElementById('tog-nonslip-' + id)?.checked || false,
+      mvb: document.getElementById('tog-mvb-' + id)?.checked || false,
+      xtopcoat: document.getElementById('tog-xtopcoat-' + id)?.checked || false,
+      fastcure: document.getElementById('tog-fastcure-' + id)?.checked || false,
+      fastcureCoats: document.getElementById('fastcureCoats-' + id)?.value || '40',
+      turnup: document.getElementById('tog-turnup-' + id)?.checked || false,
+      turnupLm: document.getElementById('turnupLm-' + id)?.value || '0',
+      silicone: document.getElementById('tog-silicone-' + id)?.checked || false,
+      silicLm: document.getElementById('silicLm-' + id)?.value || '0',
+      coving: document.getElementById('tog-coving-' + id)?.checked || false,
+      covingLm: document.getElementById('covingLm-' + id)?.value || '0',
+      border: document.getElementById('tog-border-' + id)?.checked || false,
+      borderLm: document.getElementById('borderLm-' + id)?.value || '0',
+      logo: document.getElementById('tog-logo-' + id)?.checked || false,
+      logoType: document.getElementById('logoType-' + id)?.value || '150',
+      stencil: document.getElementById('tog-stencil-' + id)?.checked || false,
+      stencilM2: document.getElementById('stencilM2-' + id)?.value || '0',
+      stencilDiff: document.getElementById('stencilDiff-' + id)?.value || '25',
+    });
   }
-  document.getElementById('saveModal').classList.add('open');
+
+  // Cracks
+  const cracks = [];
+  for (let i = 1; i <= crackCount; i++) {
+    const id = 'cr' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    cracks.push({
+      lm: document.getElementById('crlm-' + id)?.value || '1',
+      qty: document.getElementById('crqty-' + id)?.value || '1',
+    });
+  }
+
+  // Spalling
+  const spalling = {
+    small: document.getElementById('spalSmall')?.value || '0',
+    med: document.getElementById('spalMed')?.value || '0',
+    large: document.getElementById('spalLarge')?.value || '0',
+    area: document.getElementById('spalArea')?.value || '0',
+  };
+
+  // Sealants
+  const sealants = [];
+  for (let i = 1; i <= sealantZoneCount; i++) {
+    const id = 'sz' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    sealants.push({
+      name: document.getElementById('szname-' + id)?.value || '',
+      type: document.getElementById('sztype-' + id)?.value || '30',
+      area: document.getElementById('szarea-' + id)?.value || '0',
+    });
+  }
+
+  // Grinding
+  const grinds = [];
+  for (let i = 1; i <= grindZoneCount; i++) {
+    const id = 'gz' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    grinds.push({
+      name: document.getElementById('gzname-' + id)?.value || '',
+      type: document.getElementById('gztype-' + id)?.value || '40',
+      area: document.getElementById('gzarea-' + id)?.value || '0',
+      mvb: document.getElementById('gzmvb-' + id)?.checked || false,
+    });
+  }
+  const grindExtras = {
+    tripHazards: document.getElementById('tripHazards')?.value || '0',
+    expJoints: document.getElementById('expJoints')?.value || '0',
+  };
+
+  // Joints
+  const joints = [];
+  for (let i = 1; i <= jointCount; i++) {
+    const id = 'jt' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    joints.push({
+      name: document.getElementById('jtname-' + id)?.value || '',
+      lm: document.getElementById('jtlm-' + id)?.value || '0',
+      routed: document.getElementById('jtroute-' + id)?.checked || false,
+    });
+  }
+
+  // Care plan
+  const care = [];
+  for (let i = 1; i <= careZoneCount; i++) {
+    const id = 'cp' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    care.push({
+      name: document.getElementById('cpname-' + id)?.value || '',
+      type: document.getElementById('cptype-' + id)?.value || 'l2',
+      area: document.getElementById('cparea-' + id)?.value || '0',
+      nonslip: document.getElementById('cpns-' + id)?.checked || false,
+    });
+  }
+
+  return { client, floors, cracks, spalling, sealants, grinds, grindExtras, joints, care,
+    counts: { floorZoneCount, crackCount, sealantZoneCount, grindZoneCount, jointCount, careZoneCount } };
 }
 
-function loadQuote(key) {
+async function saveQuote() {
+  const payload = serialiseQuote();
+  const name = (payload.client.clientFirst + ' ' + payload.client.clientLast).trim() || 'Unnamed Quote';
+  const total = calcAll();
+  const key = 'PXT-' + Date.now();
+
+  // Show saving indicator
+  const btn = document.querySelector('.price-bar .btn-icon.gold');
+  if (btn) { btn.textContent = '⏳ Saving...'; btn.disabled = true; }
+
+  try {
+    const res = await fetch(SHEET_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'save', key, name,
+        address: payload.client.clientAddress,
+        total, date: new Date().toLocaleDateString('en-AU'),
+        ref: payload.client.quoteRef,
+        payload
+      })
+    });
+    alert('✅ Quote saved: ' + name);
+  } catch(e) {
+    // Fallback to localStorage
+    localStorage.setItem(key, JSON.stringify(payload));
+    const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
+    saves.push({ key, name, address: payload.client.clientAddress, total, date: new Date().toLocaleDateString('en-AU'), ref: payload.client.quoteRef });
+    localStorage.setItem('poxit_saves', JSON.stringify(saves));
+    alert('✅ Saved locally (offline mode)');
+  } finally {
+    if (btn) { btn.textContent = '💾 Save'; btn.disabled = false; }
+  }
+}
+
+async function openSaveLoad() {
+  const list = document.getElementById('savedList');
+  list.innerHTML = '<div class="text-muted" style="padding:16px 0; font-size:13px;">⏳ Loading quotes...</div>';
+  document.getElementById('saveModal').classList.add('open');
+
+  try {
+    const res = await fetch(SHEET_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'load' })
+    });
+    const data = await res.json();
+    const quotes = (data.quotes || []).filter(q => q.key && q.name).reverse();
+
+    if (quotes.length === 0) {
+      list.innerHTML = '<div class="text-muted" style="padding:16px 0; font-size:13px;">No saved quotes yet.</div>';
+    } else {
+      list.innerHTML = quotes.map(q => `
+        <div class="save-item" onclick="loadQuote('${q.key}')">
+          <div>
+            <div class="save-item-name">${q.name} ${q.ref ? '· ' + q.ref : ''}</div>
+            <div class="save-item-meta">${q.address || '—'} · ${q.date}</div>
+          </div>
+          <div class="save-item-total">$${Math.round(q.total).toLocaleString()}</div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    // Fallback localStorage
+    const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
+    if (saves.length === 0) {
+      list.innerHTML = '<div class="text-muted" style="padding:16px 0; font-size:13px;">No saved quotes yet.</div>';
+    } else {
+      list.innerHTML = saves.slice().reverse().map(s => `
+        <div class="save-item" onclick="loadQuoteLocal('${s.key}')">
+          <div>
+            <div class="save-item-name">${s.name} ${s.ref ? '· ' + s.ref : ''}</div>
+            <div class="save-item-meta">${s.address || '—'} · ${s.date} (local)</div>
+          </div>
+          <div class="save-item-total">$${Math.round(s.total).toLocaleString()}</div>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+async function loadQuote(key) {
+  const list = document.getElementById('savedList');
+  list.innerHTML = '<div class="text-muted" style="padding:16px 0; font-size:13px;">⏳ Loading quote...</div>';
+
+  try {
+    const res = await fetch(SHEET_URL, { method: 'POST', body: JSON.stringify({ action: 'load' }) });
+    const data = await res.json();
+    const quote = (data.quotes || []).find(q => q.key === key);
+    if (!quote) return alert('Quote not found.');
+    const payload = typeof quote.payload === 'string' ? JSON.parse(quote.payload) : quote.payload;
+    restoreQuote(payload);
+  } catch(e) {
+    alert('Could not load quote. Try again.');
+  }
+  closeSaveLoad();
+}
+
+function loadQuoteLocal(key) {
   const raw = localStorage.getItem(key);
   if (!raw) return alert('Quote not found.');
-  const { data } = JSON.parse(raw);
-  document.getElementById('clientFirst').value = data.clientFirst || '';
-  document.getElementById('clientLast').value = data.clientLast || '';
-  document.getElementById('clientPhone').value = data.clientPhone || '';
-  document.getElementById('clientEmail').value = data.clientEmail || '';
-  document.getElementById('clientAddress').value = data.clientAddress || '';
-  document.getElementById('quoteDate').value = data.quoteDate || '';
-  document.getElementById('quoteValid').value = data.quoteValid || '';
-  document.getElementById('quoteRef').value = data.quoteRef || '';
-  document.getElementById('internalNotes').value = data.internalNotes || '';
-  document.getElementById('clientNotes').value = data.clientNotes || '';
+  restoreQuote(JSON.parse(raw));
   closeSaveLoad();
-  calcAll();
-  alert('✅ Client details loaded. Re-add floor zones and services as needed.');
+}
+
+function restoreQuote(payload) {
+  // Restore client fields
+  const c = payload.client || {};
+  ['clientFirst','clientLast','clientPhone','clientEmail','clientAddress','quoteDate','quoteValid','quoteRef','internalNotes','clientNotes'].forEach(f => {
+    const el = document.getElementById(f);
+    if (el) el.value = c[f] || '';
+  });
+
+  // Reset all zones first
+  document.getElementById('floorZones').innerHTML = '';
+  document.getElementById('crackList').innerHTML = '';
+  document.getElementById('sealantZones').innerHTML = '';
+  document.getElementById('grindZones').innerHTML = '';
+  document.getElementById('jointList').innerHTML = '';
+  document.getElementById('careZones').innerHTML = '';
+  floorZoneCount = 0; crackCount = 0; sealantZoneCount = 0;
+  grindZoneCount = 0; jointCount = 0; careZoneCount = 0;
+
+  // Restore floor zones
+  (payload.floors || []).forEach(f => {
+    addFloorZone();
+    const id = 'fz' + floorZoneCount;
+    setTimeout(() => {
+      if (document.getElementById('zname-' + id)) document.getElementById('zname-' + id).value = f.name || '';
+      if (document.getElementById('area-' + id)) document.getElementById('area-' + id).value = f.area || '0';
+      // System type
+      document.querySelectorAll(`[data-group="sys-${id}"]`).forEach(el => {
+        el.classList.remove('selected');
+        if (el.textContent.trim() === f.sys) el.classList.add('selected');
+      });
+      // Flake range
+      document.querySelectorAll(`[data-group="flake-${id}"]`).forEach(el => {
+        el.classList.remove('selected');
+        if (el.textContent.trim().startsWith(f.flake?.split('+')[0]?.trim())) el.classList.add('selected');
+      });
+      // Concrete
+      document.querySelectorAll(`[data-group="conc-${id}"]`).forEach(el => {
+        el.classList.remove('selected');
+        if (el.textContent.trim().startsWith(f.conc?.split('+')[0]?.trim())) el.classList.add('selected');
+      });
+      // Coating
+      document.querySelectorAll(`[data-group="coat-${id}"]`).forEach(el => {
+        el.classList.remove('selected');
+        if (el.textContent.trim().startsWith(f.coat?.split('+')[0]?.trim())) el.classList.add('selected');
+      });
+      // Toggles
+      const toggles = ['nonslip','mvb','xtopcoat','fastcure','turnup','silicone','coving','border','logo','stencil'];
+      toggles.forEach(k => {
+        const tog = document.getElementById('tog-' + k + '-' + id);
+        if (tog) {
+          tog.checked = f[k] || false;
+          onToggleAddon(k, id);
+        }
+      });
+      // Linear metre fields
+      if (document.getElementById('fastcureCoats-' + id)) document.getElementById('fastcureCoats-' + id).value = f.fastcureCoats || '40';
+      if (document.getElementById('turnupLm-' + id)) document.getElementById('turnupLm-' + id).value = f.turnupLm || '0';
+      if (document.getElementById('silicLm-' + id)) document.getElementById('silicLm-' + id).value = f.silicLm || '0';
+      if (document.getElementById('covingLm-' + id)) document.getElementById('covingLm-' + id).value = f.covingLm || '0';
+      if (document.getElementById('borderLm-' + id)) document.getElementById('borderLm-' + id).value = f.borderLm || '0';
+      if (document.getElementById('logoType-' + id)) document.getElementById('logoType-' + id).value = f.logoType || '150';
+      if (document.getElementById('stencilM2-' + id)) document.getElementById('stencilM2-' + id).value = f.stencilM2 || '0';
+      if (document.getElementById('stencilDiff-' + id)) document.getElementById('stencilDiff-' + id).value = f.stencilDiff || '25';
+      calcAll();
+    }, 100);
+  });
+
+  // Restore cracks
+  (payload.cracks || []).forEach(cr => {
+    addCrack();
+    const id = 'cr' + crackCount;
+    if (document.getElementById('crlm-' + id)) document.getElementById('crlm-' + id).value = cr.lm || '1';
+    if (document.getElementById('crqty-' + id)) document.getElementById('crqty-' + id).value = cr.qty || '1';
+  });
+
+  // Restore spalling
+  const sp = payload.spalling || {};
+  if (document.getElementById('spalSmall')) document.getElementById('spalSmall').value = sp.small || '0';
+  if (document.getElementById('spalMed')) document.getElementById('spalMed').value = sp.med || '0';
+  if (document.getElementById('spalLarge')) document.getElementById('spalLarge').value = sp.large || '0';
+  if (document.getElementById('spalArea')) document.getElementById('spalArea').value = sp.area || '0';
+
+  // Restore sealants
+  (payload.sealants || []).forEach(s => {
+    addSealantZone();
+    const id = 'sz' + sealantZoneCount;
+    if (document.getElementById('szname-' + id)) document.getElementById('szname-' + id).value = s.name || '';
+    if (document.getElementById('sztype-' + id)) document.getElementById('sztype-' + id).value = s.type || '30';
+    if (document.getElementById('szarea-' + id)) document.getElementById('szarea-' + id).value = s.area || '0';
+  });
+
+  // Restore grinds
+  (payload.grinds || []).forEach(g => {
+    addGrindZone();
+    const id = 'gz' + grindZoneCount;
+    if (document.getElementById('gzname-' + id)) document.getElementById('gzname-' + id).value = g.name || '';
+    if (document.getElementById('gztype-' + id)) document.getElementById('gztype-' + id).value = g.type || '40';
+    if (document.getElementById('gzarea-' + id)) document.getElementById('gzarea-' + id).value = g.area || '0';
+    if (document.getElementById('gzmvb-' + id)) document.getElementById('gzmvb-' + id).checked = g.mvb || false;
+  });
+  const ge = payload.grindExtras || {};
+  if (document.getElementById('tripHazards')) document.getElementById('tripHazards').value = ge.tripHazards || '0';
+  if (document.getElementById('expJoints')) document.getElementById('expJoints').value = ge.expJoints || '0';
+
+  // Restore joints
+  (payload.joints || []).forEach(j => {
+    addJoint();
+    const id = 'jt' + jointCount;
+    if (document.getElementById('jtname-' + id)) document.getElementById('jtname-' + id).value = j.name || '';
+    if (document.getElementById('jtlm-' + id)) document.getElementById('jtlm-' + id).value = j.lm || '0';
+    if (document.getElementById('jtroute-' + id)) document.getElementById('jtroute-' + id).checked = j.routed || false;
+  });
+
+  // Restore care plan
+  (payload.care || []).forEach(cp => {
+    addCareZone();
+    const id = 'cp' + careZoneCount;
+    if (document.getElementById('cpname-' + id)) document.getElementById('cpname-' + id).value = cp.name || '';
+    if (document.getElementById('cptype-' + id)) document.getElementById('cptype-' + id).value = cp.type || 'l2';
+    if (document.getElementById('cparea-' + id)) document.getElementById('cparea-' + id).value = cp.area || '0';
+    if (document.getElementById('cpns-' + id)) document.getElementById('cpns-' + id).checked = cp.nonslip || false;
+  });
+
+  setTimeout(() => { calcAll(); showTab('client'); }, 200);
+  alert('✅ Quote fully restored!');
 }
 
 function closeSaveLoad() {
