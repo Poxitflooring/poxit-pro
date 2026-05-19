@@ -2538,6 +2538,13 @@ function confirmReset() {
 // =============================================
 //  INIT
 // =============================================
+// Global input listener — catches all dynamic inputs including area fields
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.closest('#floorZones, #crackList, #sealantZones, #grindZones, #jointList, #careZones, #tab-repairs')) {
+    calcAll();
+  }
+});
+
 window.addEventListener('load', () => {
   // Set today's date
   const today = new Date();
