@@ -826,8 +826,11 @@ function recalcTotalArea(zoneId) {
   container.querySelectorAll('[id^="shresult-"]').forEach(el => {
     total += parseFloat(el.textContent) || 0;
   });
-  const areaInput = document.getElementById('area-' + zoneId);
-  if (areaInput) areaInput.value = total.toFixed(2);
+  // Only auto-fill area if shapes exist
+  if (total > 0) {
+    const areaInput = document.getElementById('area-' + zoneId);
+    if (areaInput) areaInput.value = total.toFixed(2);
+  }
   // Update the total display
   const totalEl = document.getElementById('shapetotal-' + zoneId);
   if (totalEl) totalEl.textContent = total.toFixed(2) + ' m²';
@@ -899,7 +902,7 @@ function addFloorZone() {
       </div>
       <div class="field">
         <label>Floor Area (m²) <span style="color:var(--muted);font-size:10px;">— auto-filled by calculator above, or enter manually</span></label>
-        <input type="number" id="area-${id}" value="" step="0.5" min="0" oninput="recalcTotalArea('${id}');calcAll()" placeholder="0.00">
+        <input type="number" id="area-${id}" value="" step="0.5" min="0" oninput="calcAll()" placeholder="0.00">
       </div>
 
       <!-- CONCRETE CONDITION -->
