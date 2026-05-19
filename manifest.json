@@ -1,0 +1,18 @@
+{
+  "name": "Poxit Quote",
+  "short_name": "Poxit Quote",
+  "description": "Poxit Flooring — Quoting System",
+  "start_url": "/poxit-pro/",
+  "display": "standalone",
+  "background_color": "#0ABAB5",
+  "theme_color": "#0ABAB5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxODAgMTgwIj48cmVjdCB3aWR0aD0iMTgwIiBoZWlnaHQ9IjE4MCIgcng9IjM2IiBmaWxsPSIjMEFCQUI1Ii8+PHRleHQgeD0iOTAiIHk9Ijk4IiBmb250LWZhbWlseT0iQXJpYWwgQmxhY2ssSGVsdmV0aWNhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNTQiIGZvbnQtd2VpZ2h0PSI5MDAiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGxldHRlci1zcGFjaW5nPSIyIj5QT1hJVDwvdGV4dD48dGV4dCB4PSI5MCIgeT0iMTI4IiBmb250LWZhbWlseT0iQXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjAiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGxldHRlci1zcGFjaW5nPSI0Ij5GTE9PUklORzwvdGV4dD48L3N2Zz4=",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
