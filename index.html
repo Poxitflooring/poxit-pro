@@ -431,6 +431,7 @@
   </div>
   <div class="header-right">
     <button class="btn-icon" onclick="openSaveLoad()">💾 Saves</button>
+    <button class="btn-icon" onclick="generateInvoice()" style="background:var(--panel); border-color:#0ABAB5; color:#0ABAB5;">🧾 Invoice</button>
     <button class="btn-icon gold" onclick="generatePDF()">🖨 PDF</button>
   </div>
 </div>
@@ -2711,6 +2712,218 @@ function generatePDF() {
     // Fallback if popup blocked — load in same tab
     window.location.href = url;
   }
+}
+
+// =============================================
+//  GENERATE INVOICE
+// =============================================
+function generateInvoice() {
+  const clientFirst = document.getElementById('clientFirst').value;
+  const clientLast = document.getElementById('clientLast').value;
+  const client = (clientFirst + ' ' + clientLast).trim() || '—';
+  const phone = document.getElementById('clientPhone').value || '—';
+  const email = document.getElementById('clientEmail').value || '—';
+  const address = document.getElementById('clientAddress').value || '—';
+  const quoteRef = document.getElementById('quoteRef').value || '—';
+  const clientNotes = document.getElementById('clientNotes').value || '';
+
+  // Auto-generate invoice number
+  const invNum = (parseInt(localStorage.getItem('poxit_inv_num') || '0') + 1);
+  localStorage.setItem('poxit_inv_num', invNum);
+  const today = new Date();
+  const invRef = 'INV-' + today.getFullYear() + '-' + String(invNum).padStart(3, '0');
+  const invDate = today.toLocaleDateString('en-AU');
+  const dueDate = new Date(today);
+  dueDate.setDate(dueDate.getDate() + 7);
+  const dueDateStr = dueDate.toLocaleDateString('en-AU');
+
+  const baseTotal = calcAll();
+  const customItems = getCustomItemsTotal();
+  const adjustment = getAdjustment(baseTotal + customItems);
+  const finalTotal = baseTotal + customItems + adjustment;
+  const gst = finalTotal * 0.1;
+  const incGst = finalTotal + gst;
+  const deposit = incGst * 0.5;
+  const fmt = n => '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  const sections = buildQuoteLines();
+  const scopeRows = sections.map(s => {
+    const addonRows = s.addons.map(a => `
+      <tr class="addon-row">
+        <td class="addon-label" colspan="2">↳ ${a.label}</td>
+      </tr>`).join('');
+    return `
+      <tr class="zone-row">
+        <td>
+          <span class="zone-cat">${s.category}</span>
+          ${s.zoneName ? `<span class="zone-name"> — ${s.zoneName}</span>` : ''}
+          ${s.desc ? `<br><span class="zone-desc">${s.desc}</span>` : ''}
+        </td>
+        <td class="price-col zone-price">${fmt(s.subtotal)}</td>
+      </tr>
+      ${addonRows}`;
+  }).join('<tr class="spacer-row"><td colspan="2"></td></tr>');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poxit Invoice — ${invRef}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Open+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Open Sans', sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; max-width: 800px; margin: 0 auto; }
+  .doc-header { background: #0a0a0a; padding: 32px 40px 24px; text-align: center; }
+  .logo-main { font-family: 'Montserrat', sans-serif; font-size: 38px; font-weight: 800; color: #ffffff; letter-spacing: 4px; line-height: 1; }
+  .logo-sub { font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 600; color: #ffffff; letter-spacing: 5px; margin-top: 2px; }
+  .doc-type-gold { font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 700; color: #0ABAB5; letter-spacing: 3px; text-transform: uppercase; margin-top: 10px; }
+  .doc-type-white { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 700; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+  .gold-rule { height: 4px; background: #0ABAB5; }
+  .doc-body { padding: 28px 40px; }
+  .inv-badge { display: inline-block; background: #0ABAB5; color: white; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 2px; padding: 4px 12px; border-radius: 4px; margin-bottom: 16px; }
+  .client-box { border: 1px solid #cccccc; border-radius: 3px; margin-bottom: 24px; overflow: hidden; }
+  .client-row { display: flex; border-bottom: 1px solid #e8e8e8; align-items: baseline; padding: 7px 14px; }
+  .client-row:last-child { border-bottom: none; }
+  .client-label { font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 11px; color: #1a1a1a; min-width: 140px; flex-shrink: 0; }
+  .client-value { font-size: 12px; color: #333; flex: 1; }
+  .section-heading { display: flex; align-items: center; gap: 8px; margin: 22px 0 8px; padding-bottom: 5px; border-bottom: 1.5px solid #0ABAB5; }
+  .section-num { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 13px; color: #0ABAB5; }
+  .section-title { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 13px; color: #1a1a1a; text-transform: uppercase; letter-spacing: 0.5px; }
+  .scope-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  .scope-table td { padding: 5px 4px; vertical-align: top; }
+  .price-col { text-align: right; white-space: nowrap; min-width: 80px; }
+  .zone-row td { padding-top: 8px; }
+  .zone-cat { font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 11.5px; color: #1a1a1a; }
+  .zone-name { font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 11.5px; color: #555; }
+  .zone-desc { font-size: 10.5px; color: #777; font-style: italic; }
+  .zone-price { font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 12px; color: #1a1a1a; }
+  .addon-row td { padding: 2px 4px 2px 16px; }
+  .addon-label { font-size: 11px; color: #555; }
+  .spacer-row td { height: 6px; }
+  .totals-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .totals-table td { padding: 5px 4px; }
+  .totals-table .price-col { font-family: 'Montserrat', sans-serif; font-weight: 700; }
+  .total-ex { font-size: 12px; color: #555; border-top: 1px solid #e0e0e0; }
+  .total-gst { font-size: 11px; color: #888; }
+  .total-inc { font-size: 15px; font-family: 'Montserrat', sans-serif; font-weight: 800; color: #1a1a1a; border-top: 2px solid #0ABAB5; padding-top: 8px; }
+  .total-inc .price-col { color: #0ABAB5; font-size: 16px; }
+  /* PAYMENT TERMS BOX */
+  .payment-box { border: 1.5px solid #0ABAB5; border-radius: 6px; padding: 14px 16px; margin-top: 8px; }
+  .payment-title { font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 12px; color: #0ABAB5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .payment-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  .payment-row:last-child { border-bottom: none; font-weight: 700; }
+  .payment-row .p-label { color: #333; }
+  .payment-row .p-amount { font-family: 'Montserrat', sans-serif; font-weight: 700; color: #1a1a1a; }
+  .payment-row.due .p-amount { color: #0ABAB5; font-size: 14px; }
+  .bank-box { background: #f9f8f6; border: 1px solid #e0ddd8; border-radius: 4px; padding: 10px 14px; margin-top: 10px; font-size: 11.5px; line-height: 1.8; }
+  .bank-box strong { color: #1a1a1a; }
+  .terms-select { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .terms-btn { padding: 6px 14px; border: 1.5px solid #0ABAB5; border-radius: 20px; font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 600; cursor: pointer; background: white; color: #0ABAB5; transition: all 0.15s; }
+  .terms-btn.active { background: #0ABAB5; color: white; }
+  .disclaimer { font-size: 10px; color: #999; font-style: italic; margin-top: 6px; line-height: 1.5; }
+  .notes-box { background: #f9f8f6; border: 1px solid #e0ddd8; border-radius: 3px; padding: 10px 14px; margin-top: 8px; font-size: 11.5px; line-height: 1.6; color: #333; }
+  .doc-footer { margin-top: 28px; padding: 12px 40px; border-top: 1px solid #e0e0e0; text-align: center; font-size: 10px; color: #aaa; line-height: 1.8; }
+  @media print { .terms-select { display: none !important; } body { max-width: 100%; } .doc-body { padding: 20px 30px; } }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div class="logo-main">POXIT</div>
+  <div class="logo-sub">FLOORING</div>
+  <div class="doc-type-gold">CONCRETE REPAIR &amp; COATING SPECIALISTS</div>
+  <div class="doc-type-white">TAX INVOICE</div>
+</div>
+<div class="gold-rule"></div>
+
+<div class="doc-body">
+  <div class="inv-badge">TAX INVOICE · ${invRef}</div>
+
+  <div class="client-box">
+    <div class="client-row"><div class="client-label">Invoice To:</div><div class="client-value"><strong>${client}</strong></div></div>
+    <div class="client-row"><div class="client-label">Phone:</div><div class="client-value">${phone}</div></div>
+    <div class="client-row"><div class="client-label">Email:</div><div class="client-value">${email}</div></div>
+    <div class="client-row"><div class="client-label">Site Address:</div><div class="client-value">${address}</div></div>
+    <div class="client-row"><div class="client-label">Quote Reference:</div><div class="client-value">${quoteRef}</div></div>
+    <div class="client-row"><div class="client-label">Invoice Date:</div><div class="client-value">${invDate}</div></div>
+    <div class="client-row"><div class="client-label">Due Date:</div><div class="client-value">${dueDateStr}</div></div>
+  </div>
+
+  <div class="section-heading"><span class="section-num">1.</span><span class="section-title">Scope of Works</span></div>
+  <table class="scope-table">${scopeRows}</table>
+
+  <div class="section-heading"><span class="section-num">2.</span><span class="section-title">Invoice Total</span></div>
+  <table class="totals-table">
+    <tr class="total-ex"><td>Subtotal (Ex-GST)</td><td class="price-col">${fmt(finalTotal)}</td></tr>
+    <tr class="total-gst"><td>GST (10%)</td><td class="price-col">${fmt(gst)}</td></tr>
+    <tr class="total-inc"><td>TOTAL INC GST</td><td class="price-col">${fmt(incGst)}</td></tr>
+  </table>
+
+  <div class="section-heading"><span class="section-num">3.</span><span class="section-title">Payment Terms</span></div>
+
+  <!-- Payment terms selector — hidden on print -->
+  <div class="terms-select">
+    <button class="terms-btn active" onclick="setTerms('deposit', this)">50% Deposit + 50% on Completion</button>
+    <button class="terms-btn" onclick="setTerms('final', this)">Balance Due on Completion</button>
+    <button class="terms-btn" onclick="setTerms('paid', this)">Paid in Full</button>
+  </div>
+
+  <!-- Deposit terms (default) -->
+  <div id="terms-deposit" class="payment-box">
+    <div class="payment-title">Payment Schedule</div>
+    <div class="payment-row"><div class="p-label">50% Deposit (due to confirm booking)</div><div class="p-amount">${fmt(deposit)}</div></div>
+    <div class="payment-row"><div class="p-label">50% Balance (due on completion)</div><div class="p-amount">${fmt(deposit)}</div></div>
+    <div class="payment-row due"><div class="p-label">Total Amount Due</div><div class="p-amount due">${fmt(incGst)}</div></div>
+  </div>
+
+  <!-- Final invoice terms -->
+  <div id="terms-final" class="payment-box" style="display:none;">
+    <div class="payment-title">Balance Due</div>
+    <div class="payment-row"><div class="p-label">Deposit Previously Paid</div><div class="p-amount">-${fmt(deposit)}</div></div>
+    <div class="payment-row due"><div class="p-label">Balance Due on Completion</div><div class="p-amount due">${fmt(deposit)}</div></div>
+  </div>
+
+  <!-- Paid in full -->
+  <div id="terms-paid" class="payment-box" style="display:none;">
+    <div class="payment-title" style="color:#4caf6e;">✓ Paid in Full</div>
+    <div class="payment-row"><div class="p-label">Total Amount Paid</div><div class="p-amount" style="color:#4caf6e;">${fmt(incGst)}</div></div>
+    <div class="payment-row"><div class="p-label" style="color:#999; font-style:italic;">Thank you for your payment.</div><div class="p-amount"></div></div>
+  </div>
+
+  <div class="bank-box">
+    <strong>Bank Transfer:</strong><br>
+    Account Name: <strong>Poxit Flooring</strong><br>
+    BSB: <strong>067 873</strong>&nbsp;&nbsp;&nbsp;Account: <strong>17789072</strong><br>
+    Reference: <strong>${invRef}</strong>
+  </div>
+  <div class="disclaimer" style="margin-top:8px;">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ABN: 11 743 009 073</div>
+
+  ${clientNotes ? `<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">${clientNotes.replace(/\n/g,'<br>')}</div>` : ''}
+
+</div>
+
+<div class="doc-footer">
+  <span>Poxit Flooring</span> · <span>Concrete Repair &amp; Coating Specialists</span> · <span>poxitflooring@gmail.com</span> · <span>0478 495 995</span> · <span>Gold Coast, QLD</span> · <span>ABN 11 743 009 073</span>
+</div>
+
+<script>
+function setTerms(type, btn) {
+  document.querySelectorAll('.terms-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['deposit','final','paid'].forEach(t => {
+    document.getElementById('terms-' + t).style.display = t === type ? 'block' : 'none';
+  });
+}
+window.onload = () => window.print();
+<\/script>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const newTab = window.open(url, '_blank');
+  if (!newTab) window.location.href = url;
 }
 
 // =============================================
