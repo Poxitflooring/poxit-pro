@@ -445,6 +445,7 @@
   <div class="tab" onclick="showTab('grinding')">⚙️ Grinding</div>
   <div class="tab" onclick="showTab('joints')">📐 Joints</div>
   <div class="tab" onclick="showTab('careplan')">♻️ Care</div>
+  <div class="tab" onclick="showTab('measure')">📏 Measure</div>
   <div class="tab" onclick="showTab('summary')">💰 Summary</div>
   <div class="tab" onclick="showTab('custom')" style="color:var(--gold);">✏️ Custom</div>
   <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Reset</div>
@@ -722,6 +723,46 @@
 
 </div>
 
+<!-- ============ MEASURE TAB ============ -->
+<div id="tab-measure" class="section">
+
+  <div class="info-box">
+    <strong>Standalone measuring tool.</strong> Add shapes, get your total, then send it to any zone in the quote.
+  </div>
+
+  <div class="card">
+    <div class="card-header no-toggle">
+      <div class="card-title">Site Measure</div>
+      <button class="btn-icon" onclick="clearMeasure()" style="font-size:11px; padding:6px 10px;">Clear All</button>
+    </div>
+    <div class="card-body open">
+      <div id="measureShapes"></div>
+      <button class="btn-add" onclick="addMeasureShape()">＋ Add Shape</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 4px;border-top:2px solid var(--gold);margin-top:10px;">
+        <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Total Measured</div>
+        <div style="font-family:'DM Mono',monospace;font-size:24px;color:var(--gold);" id="measureTotal">0.00 m²</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header no-toggle">
+      <div class="card-title">Send To Zone</div>
+    </div>
+    <div class="card-body open">
+      <div class="info-box" style="font-size:11px;">Pick where to send the measured total. The zone must already exist (add it in its tab first).</div>
+      <div class="field">
+        <label>Destination</label>
+        <select id="measureDest">
+          <option value="">— Select a zone —</option>
+        </select>
+      </div>
+      <button class="btn-icon gold" style="width:100%;" onclick="sendMeasureTo()">➤ Send Total to Zone</button>
+    </div>
+  </div>
+
+</div>
+
 <!-- ============ SUMMARY TAB ============ -->
 <div id="tab-summary" class="section">
 
@@ -839,8 +880,9 @@ function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   const tabs = document.querySelectorAll('.tab');
-  const tabMap = { client:0, floors:1, repairs:2, sealants:3, grinding:4, joints:5, careplan:6, summary:7, custom:8 };
+  const tabMap = { client:0, floors:1, repairs:2, sealants:3, grinding:4, joints:5, careplan:6, measure:7, summary:8, custom:9 };
   if (tabMap[name] !== undefined) tabs[tabMap[name]].classList.add('active');
+  if (name === 'measure') populateMeasureDest();
   calcAll();
 }
 
@@ -1520,6 +1562,146 @@ function updateCustomTab(baseTotal) {
   if (ft) ft.textContent = f(finalTotal);
   if (gstEl) gstEl.textContent = f(gst);
   if (incEl) incEl.textContent = f(incGst);
+}
+
+// =============================================
+//  MEASURE TAB
+// =============================================
+let measureShapeCount = 0;
+
+function addMeasureShape() {
+  measureShapeCount++;
+  const sid = 'ms' + measureShapeCount;
+  const container = document.getElementById('measureShapes');
+  const div = document.createElement('div');
+  div.id = 'mshape-' + sid;
+  div.style.cssText = 'background:var(--dark);border-radius:8px;padding:10px;margin-bottom:8px;';
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <select id="mstype-${sid}" onchange="renderMeasureInputs('${sid}')" style="flex:1;margin-right:8px;">
+        <option value="rect">Rectangle</option>
+        <option value="tri">Triangle</option>
+        <option value="trap">Trapezoid</option>
+        <option value="circ">Circle</option>
+      </select>
+      <button class="btn-remove" onclick="removeMeasureShape('${sid}')">✕</button>
+    </div>
+    <div id="msinputs-${sid}"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+      <div style="font-size:11px;color:var(--muted);">Area</div>
+      <div style="font-family:'DM Mono',monospace;font-size:14px;color:var(--gold);" id="msresult-${sid}">0.00 m²</div>
+    </div>
+  `;
+  container.appendChild(div);
+  renderMeasureInputs(sid);
+}
+
+function renderMeasureInputs(sid) {
+  const shape = document.getElementById('mstype-' + sid)?.value || 'rect';
+  const container = document.getElementById('msinputs-' + sid);
+  if (!container) return;
+  if (shape === 'rect') {
+    container.innerHTML = `<div class="row"><div class="field"><label>Length (m)</label><input type="number" id="ms1-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div><div class="field"><label>Width (m)</label><input type="number" id="ms2-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div></div>`;
+  } else if (shape === 'tri') {
+    container.innerHTML = `<div class="row"><div class="field"><label>Base (m)</label><input type="number" id="ms1-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div><div class="field"><label>Height (m)</label><input type="number" id="ms2-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div></div>`;
+  } else if (shape === 'trap') {
+    container.innerHTML = `<div class="row"><div class="field"><label>Side A (m)</label><input type="number" id="ms1-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div><div class="field"><label>Side B (m)</label><input type="number" id="ms2-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div></div><div class="field"><label>Height (m)</label><input type="number" id="ms3-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div>`;
+  } else if (shape === 'circ') {
+    container.innerHTML = `<div class="field"><label>Radius (m)</label><input type="number" id="ms1-${sid}" step="0.1" min="0" oninput="calcMeasure('${sid}')"></div>`;
+  }
+  calcMeasure(sid);
+}
+
+function calcMeasure(sid) {
+  const shape = document.getElementById('mstype-' + sid)?.value || 'rect';
+  const v1 = parseFloat(document.getElementById('ms1-' + sid)?.value) || 0;
+  const v2 = parseFloat(document.getElementById('ms2-' + sid)?.value) || 0;
+  const v3 = parseFloat(document.getElementById('ms3-' + sid)?.value) || 0;
+  let area = 0;
+  if (shape === 'rect') area = v1 * v2;
+  else if (shape === 'tri') area = 0.5 * v1 * v2;
+  else if (shape === 'trap') area = 0.5 * (v1 + v2) * v3;
+  else if (shape === 'circ') area = Math.PI * v1 * v1;
+  const res = document.getElementById('msresult-' + sid);
+  if (res) res.textContent = area.toFixed(2) + ' m²';
+  updateMeasureTotal();
+}
+
+function updateMeasureTotal() {
+  const container = document.getElementById('measureShapes');
+  if (!container) return;
+  let total = 0;
+  container.querySelectorAll('[id^="msresult-"]').forEach(el => {
+    total += parseFloat(el.textContent) || 0;
+  });
+  const totalEl = document.getElementById('measureTotal');
+  if (totalEl) totalEl.textContent = total.toFixed(2) + ' m²';
+  populateMeasureDest();
+}
+
+function removeMeasureShape(sid) {
+  const el = document.getElementById('mshape-' + sid);
+  if (el) el.remove();
+  updateMeasureTotal();
+}
+
+function clearMeasure() {
+  document.getElementById('measureShapes').innerHTML = '';
+  measureShapeCount = 0;
+  updateMeasureTotal();
+}
+
+function populateMeasureDest() {
+  const sel = document.getElementById('measureDest');
+  if (!sel) return;
+  const current = sel.value;
+  let options = '<option value="">— Select a zone —</option>';
+
+  // Floor zones
+  for (let i = 1; i <= floorZoneCount; i++) {
+    const id = 'fz' + i;
+    if (!document.getElementById('card-' + id)) continue;
+    const name = document.getElementById('zname-' + id)?.value || ('Floor Zone ' + i);
+    options += `<option value="area-${id}">🪨 Floor — ${name}</option>`;
+  }
+  // Sealant zones
+  for (let i = 1; i <= sealantZoneCount; i++) {
+    const id = 'sz' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    const name = document.getElementById('szname-' + id)?.value || ('Sealant Zone ' + i);
+    options += `<option value="szarea-${id}">💧 Sealant — ${name}</option>`;
+  }
+  // Grind zones
+  for (let i = 1; i <= grindZoneCount; i++) {
+    const id = 'gz' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    const name = document.getElementById('gzname-' + id)?.value || ('Grind Zone ' + i);
+    options += `<option value="gzarea-${id}">⚙️ Grinding — ${name}</option>`;
+  }
+  // Care zones
+  for (let i = 1; i <= careZoneCount; i++) {
+    const id = 'cp' + i;
+    if (!document.getElementById('row-' + id)) continue;
+    const name = document.getElementById('cpname-' + id)?.value || ('Care Zone ' + i);
+    options += `<option value="cparea-${id}">♻️ Care Plan — ${name}</option>`;
+  }
+  // Spalling patched area
+  options += `<option value="spalArea">🔧 Spalling — Patched Area</option>`;
+
+  sel.innerHTML = options;
+  if (current) sel.value = current;
+}
+
+function sendMeasureTo() {
+  const destId = document.getElementById('measureDest')?.value;
+  if (!destId) return alert('Pick a destination zone first.');
+  const total = parseFloat(document.getElementById('measureTotal')?.textContent) || 0;
+  if (total === 0) return alert('Measure something first — total is 0.');
+  const destEl = document.getElementById(destId);
+  if (!destEl) return alert('Zone not found — it may have been removed.');
+  destEl.value = total.toFixed(2);
+  calcAll();
+  alert('✅ ' + total.toFixed(2) + ' m² sent!');
 }
 
 // =============================================
@@ -2992,6 +3174,10 @@ function confirmReset() {
   careZoneCount = 0;
   softCutCount = 0;
   customItemCount = 0;
+  document.getElementById('measureShapes').innerHTML = '';
+  measureShapeCount = 0;
+  const mt = document.getElementById('measureTotal');
+  if (mt) mt.textContent = '0.00 m²';
 
   // Reset pricing toggle
   showPricingBreakdown = false;
