@@ -355,7 +355,8 @@ const PRICE = {
   crackRate: 20, crackMin: 80,
   spall: { small:15, med:30, large:50, area:40 },
   care: { 'Level 2 Refresh Coat': {rate:20,min:500}, 'Level 3 Full Rejuvenation': {rate:32,min:900}, 'Level 3 + Reflake': {rate:44,min:900} },
-  careNonslip: 10
+  careNonslip: 10,
+  shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 }
 };
 const SERVICES = [
   { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic — from $85/m²' },
@@ -365,12 +366,13 @@ const SERVICES = [
   { key:'grind',    icon:'⚙️', name:'Concrete Grinding', rate:'$40–$50/m²' },
   { key:'polished', icon:'✨', name:'Polished Concrete', rate:'Mechanical polish — $120/m²' },
   { key:'care',     icon:'♻️', name:'Care Plan Refresh', rate:'Existing care plan clients' },
+  { key:'shine',    icon:'🧽', name:'Clean Grip & Shine', rate:'Standard $15/m² · Premium post-buff $20/m²' },
 ];
 function freshState() {
   return {
     client: { first:'', last:'', phone:'', email:'', address:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
-    epoxyZones: [], tintedZones: [], sealZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [],
+    epoxyZones: [], tintedZones: [], sealZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
     joints: [], softCuts: [],
@@ -443,7 +445,7 @@ function renderServices() {
       '<div class="svc-check">✓</div></div>';
   }).join('');
 }
-function toggleService(key) { S.services[key] = !S.services[key]; renderServices(); calcAll(); }
+function toggleService(key) { S.services[key] = !S.services[key]; renderServices(); populateMeasureDest(); calcAll(); }
 
 function pills(options, selected, fn, idx) {
   return '<div class="radio-group">' + options.map(function(o) {
@@ -467,6 +469,7 @@ function renderDetails() {
     if (s.key === 'grind') html += grindSection();
     if (s.key === 'polished') html += polishedSection();
     if (s.key === 'care') html += careSection();
+    if (s.key === 'shine') html += shineSection();
   });
   c.innerHTML = html;
   syncBoundInputs();
@@ -564,7 +567,18 @@ function polishedSection() {
   h += '<button class="btn-add" onclick="addZone(\'polished\')">＋ Add Polished Zone</button></div></div>';
   return h;
 }
-
+function shineSection() {
+  let h = '<div class="card"><div class="card-header"><div class="card-title">🧽 Clean Grip & Shine <span class="badge" id="badge-shine">$0</span></div></div><div class="card-body"><div class="info-box" style="font-size:11px;">XO2 Clean Grip & Shine — clean, apply & buff. Standard $15/m² · Premium full machine post-buff $20/m².</div>';
+  S.shineZones.forEach(function(z, i) {
+    h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Zone ' + (i+1) + '</div><button class="btn-remove" onclick="rmZone(\'shineZones\',' + i + ')">✕</button></div>' +
+      '<div class="field"><label>Zone Name</label><input type="text" data-bind="shineZones.' + i + '.name" placeholder="e.g. Garage floor"></div>' +
+      '<div class="field"><label>Finish</label><select data-bind="shineZones.' + i + '.tier"><option>Standard — Clean, Apply &amp; Light Buff</option><option>Premium — Clean, Apply &amp; Full Machine Post-Buff</option></select></div>' +
+      '<div class="field"><label>Area (m²)</label><input type="number" data-bind="shineZones.' + i + '.area" step="0.5" min="0"></div>' +
+      '<div class="zone-total-line"><div class="zt-label">Zone Total</div><div class="zt-value" id="zt-shine-' + i + '">$0</div></div></div>';
+  });
+  h += '<button class="btn-add" onclick="addZone(\'shine\')">＋ Add Shine Zone</button></div></div>';
+  return h;
+}
 function careSection() {
   let h = '<div class="card"><div class="card-header"><div class="card-title">♻️ Care Plan Refresh <span class="badge" id="badge-care">$0</span></div></div><div class="card-body">';
   S.careZones.forEach(function(z, i) {
@@ -589,6 +603,7 @@ function addZone(type) {
   if (type === 'grind') S.grindZones.push({ name:'', type:'Light Surface Prep', area:0, mvb:false });
   if (type === 'polished') S.polishedZones.push({ name:'', gloss:'Satin', area:0 });
   if (type === 'care') S.careZones.push({ name:'', type:'Level 2 Refresh Coat', area:0, nonslip:false });
+  if (type === 'shine') S.shineZones.push({ name:'', tier:'Standard — Clean, Apply & Light Buff', area:0 });
   renderDetails(); calcAll();
 }
 function rmZone(listName, i) { S[listName].splice(i,1); renderDetails(); renderAddons(); calcAll(); }
@@ -740,24 +755,45 @@ function populateMeasureDest() {
   if (!sel) return;
   const cur = sel.value;
   let o = '<option value="">— Select a zone —</option>';
-  S.epoxyZones.forEach(function(z,i){ o += '<option value="epoxyZones.' + i + '.area">🪨 Epoxy — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  S.tintedZones.forEach(function(z,i){ o += '<option value="tintedZones.' + i + '.area">🎨 Tinted — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  S.sealZones.forEach(function(z,i){ o += '<option value="sealZones.' + i + '.area">💧 Seal — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  S.aquaZones.forEach(function(z,i){ o += '<option value="aquaZones.' + i + '.area">🌧 AquaSeal — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  S.grindZones.forEach(function(z,i){ o += '<option value="grindZones.' + i + '.area">⚙️ Grind — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  S.polishedZones.forEach(function(z,i){ o += '<option value="polishedZones.' + i + '.area">✨ Polished — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  S.careZones.forEach(function(z,i){ o += '<option value="careZones.' + i + '.area">♻️ Care — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
-  o += '<option value="spalling.area">🔧 Spalling — Patched Area</option>';
+  const map = [
+    { key:'epoxy',    list:'epoxyZones',    icon:'🪨', label:'Epoxy' },
+    { key:'tinted',   list:'tintedZones',   icon:'🎨', label:'Tinted' },
+    { key:'seal',     list:'sealZones',     icon:'💧', label:'Seal' },
+    { key:'aqua',     list:'aquaZones',     icon:'🌧', label:'AquaSeal' },
+    { key:'grind',    list:'grindZones',    icon:'⚙️', label:'Grind' },
+    { key:'polished', list:'polishedZones', icon:'✨', label:'Polished' },
+    { key:'care',     list:'careZones',     icon:'♻️', label:'Care' },
+    { key:'shine',    list:'shineZones',    icon:'🧽', label:'Clean Grip & Shine' }
+  ];
+  map.forEach(function(m){
+    if (!S.services[m.key]) return;
+    const zones = S[m.list];
+    if (zones.length === 0) {
+      o += '<option value="NEW:' + m.key + '">' + m.icon + ' ' + m.label + ' — ＋ new zone</option>';
+    } else {
+      zones.forEach(function(z,i){ o += '<option value="' + m.list + '.' + i + '.area">' + m.icon + ' ' + m.label + ' — ' + (z.name||'Zone '+(i+1)) + '</option>'; });
+      o += '<option value="NEW:' + m.key + '">' + m.icon + ' ' + m.label + ' — ＋ another zone</option>';
+    }
+  });
+  if (S.services['epoxy'] || S.spalling) o += '<option value="spalling.area">🔧 Spalling — Patched Area</option>';
   sel.innerHTML = o;
   if (cur) sel.value = cur;
 }
 function sendMeasureTo() {
-  const dest = document.getElementById('measureDest').value;
+  let dest = document.getElementById('measureDest').value;
   if (!dest) { alert('Pick a destination zone first.'); return; }
   let total = 0;
   measureShapes.forEach(function(s){ total += shapeArea(s); });
   if (total === 0) { alert('Measure something first — total is 0.'); return; }
+  if (dest.indexOf('NEW:') === 0) {
+    const key = dest.split(':')[1];
+    addZone(key);
+    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones' }[key];
+    dest = listName + '.' + (S[listName].length - 1) + '.area';
+  }
   setPath(S, dest, parseFloat(total.toFixed(2)));
+  renderDetails();
+  populateMeasureDest();
   syncBoundInputs();
   calcAll();
   alert('✅ ' + total.toFixed(2) + ' m² sent!');
@@ -847,6 +883,11 @@ function buildSections() {
     const addons = ns > 0 ? [{label:'Non-slip Add-on', price:ns}] : [];
     sections.push({ key:'care-'+i, category:'♻️ Care Plan Refresh', zoneName:z.name||('Zone '+(i+1)), desc:z.type + ' · ' + z.area + 'm²', addons:addons, subtotal:Math.max(cfg.min, z.area*cfg.rate)+ns });
   });
+  S.shineZones.forEach(function(z,i) {
+    if (!z.area) return;
+    const rate = PRICE.shine[z.tier] || 15;
+    sections.push({ key:'shine-'+i, category:'🧽 Clean Grip & Shine', zoneName:z.name||('Zone '+(i+1)), desc:z.tier + ' · ' + z.area + 'm²', addons:[], subtotal:z.area*rate });
+  });
   let cSub = 0; const cAdd = [];
   S.cracks.forEach(function(c,i) {
     const p = Math.max(PRICE.crackMin, (c.lm||0)*PRICE.crackRate) * (c.qty||1);
@@ -915,6 +956,7 @@ function calcAll() {
   S.grindZones.forEach(function(z,i){ const el = document.getElementById('zt-grind-'+i); if (el) { let t = (z.area||0)*(PRICE.grindType[z.type]||40); if (z.mvb) t += (z.area||0)*PRICE.grindMvb; el.textContent = '$' + Math.round(t).toLocaleString(); } });
   S.polishedZones.forEach(function(z,i){ const el = document.getElementById('zt-polished-'+i); if (el) el.textContent = '$' + Math.round((z.area||0)*PRICE.polished).toLocaleString(); });
   S.careZones.forEach(function(z,i){ const el = document.getElementById('zt-care-'+i); if (el) { const cfg = PRICE.care[z.type]||PRICE.care['Level 2 Refresh Coat']; const ns = z.nonslip?(z.area||0)*PRICE.careNonslip:0; el.textContent = (z.area>0) ? '$' + Math.round(Math.max(cfg.min,(z.area||0)*cfg.rate)+ns).toLocaleString() : '$0'; } });
+  S.shineZones.forEach(function(z,i){ const el = document.getElementById('zt-shine-'+i); if (el) el.textContent = '$' + Math.round((z.area||0)*(PRICE.shine[z.tier]||15)).toLocaleString(); });
 
   function badge(id, val) { const el = document.getElementById(id); if (el) el.textContent = '$' + Math.round(val).toLocaleString(); }
   function sumKeys(prefix) { let t = 0; sections.forEach(function(s){ if (s.key.indexOf(prefix) === 0) t += s.subtotal; }); return t; }
@@ -925,6 +967,7 @@ function calcAll() {
   badge('badge-grind', sumKeys('grind'));
   badge('badge-polished', sumKeys('polished-'));
   badge('badge-care', sumKeys('care-'));
+  badge('badge-shine', sumKeys('shine-'));
   badge('badge-crack', sumKeys('cracks'));
   badge('badge-spalling', sumKeys('spalling'));
   badge('badge-joints', sumKeys('joints'));
