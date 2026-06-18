@@ -346,7 +346,12 @@ const PRICE = {
   logo: { '150':'Over-Flake Small — $150', '250':'Over-Flake Medium — $250', '200':'Flat/Dead-Flat Small — $200', '350':'Flat/Dead-Flat Medium — $350' },
   stencil: { '25':'Easy — $25/m²', '40':'Medium — $40/m²', '60':'Hard — $60/m²', '85':'Very Hard — $85/m²' },
   tintedPrep: { 'Pressure Wash':30, 'Grind Prep':45 },
-  seal: { 'Hard Seal (Gloss)':50, 'Stone Seal (Matte/Satin)':60 },
+  seal: { 'Essential Seal':20, 'Premium Matte':30, 'Premium Gloss':35, 'Elite Matte':40, 'Elite Gloss':45 },
+  sealMin: { 'Essential Seal':200, 'Premium Matte':250, 'Premium Gloss':280, 'Elite Matte':300, 'Elite Gloss':350 },
+  sealDesc: { 'Essential Seal':'Entry · damp-tolerant penetrating · satin', 'Premium Matte':'Solvent acrylic · natural/low sheen', 'Premium Gloss':'Solvent wet-look enhancer', 'Elite Matte':'Semi-penetrating · tough · longest matte life', 'Elite Gloss':'2-pack UV gloss · max durability' },
+  gs: { 'Premium Grind & Seal':75, 'Elite Grind & Seal':90 },
+  gsMin: { 'Premium Grind & Seal':400, 'Elite Grind & Seal':450 },
+  gsDesc: { 'Premium Grind & Seal':'Grind prep + Premium matte seal · complete finish', 'Elite Grind & Seal':'Grind prep + Elite matte seal · complete finish' },
   aqua: 20,
   grindType: { 'Light Surface Prep':40, 'Medium Grind':45, 'Heavy Grind/Levelling':50 },
   grindMvb: 20, trip: 80, lip: 60,
@@ -361,8 +366,8 @@ const PRICE = {
 const SERVICES = [
   { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic — from $85/m²' },
   { key:'tinted',   icon:'🎨', name:'Tinted Sealant', rate:'Pressure wash $30/m² · Grind prep $45/m²' },
-  { key:'seal',     icon:'💧', name:'Grind / Hone & Seal', rate:'Hard Seal $50/m² · Stone Seal $60/m²' },
-  { key:'aqua',     icon:'🌧', name:'AquaSeal Penetrating Sealer', rate:'$20/m²' },
+  { key:'seal',     icon:'💧', name:'Cleaning &amp; Sealing', rate:'Seal only — $20–$45/m²' },
+  { key:'gs',       icon:'🪓', name:'Grind &amp; Seal', rate:'Prep + seal — Premium $75/m² · Elite $90/m²' },
   { key:'grind',    icon:'⚙️', name:'Concrete Grinding', rate:'$40–$50/m²' },
   { key:'polished', icon:'✨', name:'Polished Concrete', rate:'Mechanical polish — $120/m²' },
   { key:'care',     icon:'♻️', name:'Care Plan Refresh', rate:'Existing care plan clients' },
@@ -372,7 +377,7 @@ function freshState() {
   return {
     client: { first:'', last:'', phone:'', email:'', address:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
-    epoxyZones: [], tintedZones: [], sealZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
+    epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
     joints: [], softCuts: [],
@@ -465,6 +470,7 @@ function renderDetails() {
     if (s.key === 'epoxy') html += epoxySection();
     if (s.key === 'tinted') html += tintedSection();
     if (s.key === 'seal') html += sealSection();
+    if (s.key === 'gs') html += gsSection();
     if (s.key === 'aqua') html += aquaSection();
     if (s.key === 'grind') html += grindSection();
     if (s.key === 'polished') html += polishedSection();
@@ -512,11 +518,16 @@ function tintedSection() {
 function setTZ_prep(i,v){ S.tintedZones[i].prep=v; renderDetails(); calcAll(); }
 
 function sealSection() {
-  let h = '<div class="card"><div class="card-header"><div class="card-title">💧 Grind / Hone &amp; Seal <span class="badge" id="badge-seal">$0</span></div></div><div class="card-body">';
+  let h = '<div class="card"><div class="card-header"><div class="card-title">💧 Cleaning &amp; Sealing <span class="badge" id="badge-seal">$0</span></div></div><div class="card-body">' +
+    '<div class="info-box" style="font-size:11px;">Seal only — clean, dry, sound surface (no grind). Pick a tier per zone. Min charge applies per zone. <strong>Need surface prep too? Use the Grind &amp; Seal service.</strong></div>';
   S.sealZones.forEach(function(z, i) {
+    var rate = PRICE.seal[z.type] || 20;
+    var desc = PRICE.sealDesc[z.type] || '';
+    var min = PRICE.sealMin[z.type] || 0;
     h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Zone ' + (i+1) + '</div><button class="btn-remove" onclick="rmZone(\'sealZones\',' + i + ')">✕</button></div>' +
       '<div class="field"><label>Zone Name</label><input type="text" data-bind="sealZones.' + i + '.name" placeholder="e.g. Patio"></div>' +
-      '<div class="field"><label>Seal Type</label>' + pills(Object.keys(PRICE.seal), z.type, 'setSZ_type', i) + '</div>' +
+      '<div class="field"><label>Seal Tier</label>' + pills(Object.keys(PRICE.seal), z.type, 'setSZ_type', i) + '</div>' +
+      '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + desc + ' · <strong>$' + rate + '/m²</strong> · min $' + min + '</div>' +
       '<div class="field"><label>Area (m²)</label><input type="number" data-bind="sealZones.' + i + '.area" step="0.5" min="0"></div>' +
       '<div class="zone-total-line"><div class="zt-label">Zone Total</div><div class="zt-value" id="zt-seal-' + i + '">$0</div></div></div>';
   });
@@ -524,6 +535,25 @@ function sealSection() {
   return h;
 }
 function setSZ_type(i,v){ S.sealZones[i].type=v; renderDetails(); calcAll(); }
+
+function gsSection() {
+  let h = '<div class="card"><div class="card-header"><div class="card-title">🪓 Grind &amp; Seal <span class="badge" id="badge-gs">$0</span></div></div><div class="card-body">' +
+    '<div class="info-box" style="font-size:11px;">Complete finished job — surface prep (grind) <strong>plus</strong> seal in one. Pick a tier per zone. Min charge applies per zone.</div>';
+  S.gsZones.forEach(function(z, i) {
+    var rate = PRICE.gs[z.type] || 75;
+    var desc = PRICE.gsDesc[z.type] || '';
+    var min = PRICE.gsMin[z.type] || 0;
+    h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Zone ' + (i+1) + '</div><button class="btn-remove" onclick="rmZone(\'gsZones\',' + i + ')">✕</button></div>' +
+      '<div class="field"><label>Zone Name</label><input type="text" data-bind="gsZones.' + i + '.name" placeholder="e.g. Driveway"></div>' +
+      '<div class="field"><label>Tier</label>' + pills(Object.keys(PRICE.gs), z.type, 'setGSZ_type', i) + '</div>' +
+      '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + desc + ' · <strong>$' + rate + '/m²</strong> · min $' + min + '</div>' +
+      '<div class="field"><label>Area (m²)</label><input type="number" data-bind="gsZones.' + i + '.area" step="0.5" min="0"></div>' +
+      '<div class="zone-total-line"><div class="zt-label">Zone Total</div><div class="zt-value" id="zt-gs-' + i + '">$0</div></div></div>';
+  });
+  h += '<button class="btn-add" onclick="addZone(\'gs\')">＋ Add Grind &amp; Seal Zone</button></div></div>';
+  return h;
+}
+function setGSZ_type(i,v){ S.gsZones[i].type=v; renderDetails(); calcAll(); }
 
 function aquaSection() {
   let h = '<div class="card"><div class="card-header"><div class="card-title">🌧 AquaSeal <span class="badge" id="badge-aqua">$0</span></div></div><div class="card-body"><div class="info-box" style="font-size:11px;">Penetrating sealer, spray-on. $20/m².</div>';
@@ -598,7 +628,8 @@ function addZone(type) {
   if (type === 'epoxy') S.epoxyZones.push({ name:'', sys:'Flake Internal', flake:'Standard', conc:'Hard', coat:'None', area:0,
     addons:{ nonslip:false, mvb:false, xtopcoat:false, fastcure:false, fastcureCoats:'2', turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' } });
   if (type === 'tinted') S.tintedZones.push({ name:'', prep:'Pressure Wash', colour:'', coats:'2', area:0 });
-  if (type === 'seal') S.sealZones.push({ name:'', type:'Hard Seal (Gloss)', area:0 });
+  if (type === 'seal') S.sealZones.push({ name:'', type:'Essential Seal', area:0 });
+  if (type === 'gs') S.gsZones.push({ name:'', type:'Premium Grind & Seal', area:0 });
   if (type === 'aqua') S.aquaZones.push({ name:'', area:0 });
   if (type === 'grind') S.grindZones.push({ name:'', type:'Light Surface Prep', area:0, mvb:false });
   if (type === 'polished') S.polishedZones.push({ name:'', gloss:'Satin', area:0 });
@@ -759,6 +790,7 @@ function populateMeasureDest() {
     { key:'epoxy',    list:'epoxyZones',    icon:'🪨', label:'Epoxy' },
     { key:'tinted',   list:'tintedZones',   icon:'🎨', label:'Tinted' },
     { key:'seal',     list:'sealZones',     icon:'💧', label:'Seal' },
+    { key:'gs',       list:'gsZones',       icon:'🪓', label:'Grind & Seal' },
     { key:'aqua',     list:'aquaZones',     icon:'🌧', label:'AquaSeal' },
     { key:'grind',    list:'grindZones',    icon:'⚙️', label:'Grind' },
     { key:'polished', list:'polishedZones', icon:'✨', label:'Polished' },
@@ -788,7 +820,7 @@ function sendMeasureTo() {
   if (dest.indexOf('NEW:') === 0) {
     const key = dest.split(':')[1];
     addZone(key);
-    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones' }[key];
+    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones' }[key];
     dest = listName + '.' + (S[listName].length - 1) + '.area';
   }
   setPath(S, dest, parseFloat(total.toFixed(2)));
@@ -855,7 +887,17 @@ function buildSections() {
   });
   S.sealZones.forEach(function(z,i) {
     if (!z.area) return;
-    sections.push({ key:'seal-'+i, category:'💧 Grind & Seal', zoneName:z.name||('Zone '+(i+1)), desc:z.type + ' · ' + z.area + 'm²', addons:[], subtotal:z.area*(PRICE.seal[z.type]||50) });
+    var rate = PRICE.seal[z.type] || 20;
+    var min = PRICE.sealMin[z.type] || 0;
+    var sub = Math.max(z.area*rate, min);
+    sections.push({ key:'seal-'+i, category:'💧 Cleaning &amp; Sealing', zoneName:z.name||('Zone '+(i+1)), desc:z.type + ' · ' + z.area + 'm²' + (z.area*rate < min ? ' (min charge $' + min + ')' : ''), addons:[], subtotal:sub });
+  });
+  S.gsZones.forEach(function(z,i) {
+    if (!z.area) return;
+    var rate = PRICE.gs[z.type] || 75;
+    var min = PRICE.gsMin[z.type] || 0;
+    var sub = Math.max(z.area*rate, min);
+    sections.push({ key:'gs-'+i, category:'🪓 Grind &amp; Seal', zoneName:z.name||('Zone '+(i+1)), desc:z.type + ' · ' + z.area + 'm²' + (z.area*rate < min ? ' (min charge $' + min + ')' : ''), addons:[], subtotal:sub });
   });
   S.aquaZones.forEach(function(z,i) {
     if (!z.area) return;
@@ -951,7 +993,8 @@ function calcAll() {
 
   S.epoxyZones.forEach(function(z,i){ const el = document.getElementById('zt-epoxy-'+i); if (el) el.textContent = '$' + Math.round(epoxyZoneTotal(z)).toLocaleString(); });
   S.tintedZones.forEach(function(z,i){ const el = document.getElementById('zt-tinted-'+i); if (el) { const r = PRICE.tintedPrep[z.prep]||30; const e = z.coats==='3'?z.area*10:0; el.textContent = '$' + Math.round((z.area||0)*r+e).toLocaleString(); } });
-  S.sealZones.forEach(function(z,i){ const el = document.getElementById('zt-seal-'+i); if (el) el.textContent = '$' + Math.round((z.area||0)*(PRICE.seal[z.type]||50)).toLocaleString(); });
+  S.sealZones.forEach(function(z,i){ const el = document.getElementById('zt-seal-'+i); if (el) { var r=PRICE.seal[z.type]||20, m=PRICE.sealMin[z.type]||0; el.textContent = '$' + Math.round(Math.max((z.area||0)*r, (z.area>0?m:0))).toLocaleString(); } });
+  S.gsZones.forEach(function(z,i){ const el = document.getElementById('zt-gs-'+i); if (el) { var r=PRICE.gs[z.type]||75, m=PRICE.gsMin[z.type]||0; el.textContent = '$' + Math.round(Math.max((z.area||0)*r, (z.area>0?m:0))).toLocaleString(); } });
   S.aquaZones.forEach(function(z,i){ const el = document.getElementById('zt-aqua-'+i); if (el) el.textContent = '$' + Math.round((z.area||0)*PRICE.aqua).toLocaleString(); });
   S.grindZones.forEach(function(z,i){ const el = document.getElementById('zt-grind-'+i); if (el) { let t = (z.area||0)*(PRICE.grindType[z.type]||40); if (z.mvb) t += (z.area||0)*PRICE.grindMvb; el.textContent = '$' + Math.round(t).toLocaleString(); } });
   S.polishedZones.forEach(function(z,i){ const el = document.getElementById('zt-polished-'+i); if (el) el.textContent = '$' + Math.round((z.area||0)*PRICE.polished).toLocaleString(); });
@@ -963,6 +1006,7 @@ function calcAll() {
   badge('badge-epoxy', sumKeys('epoxy-'));
   badge('badge-tinted', sumKeys('tinted-'));
   badge('badge-seal', sumKeys('seal-'));
+  badge('badge-gs', sumKeys('gs-'));
   badge('badge-aqua', sumKeys('aqua-'));
   badge('badge-grind', sumKeys('grind'));
   badge('badge-polished', sumKeys('polished-'));
