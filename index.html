@@ -138,6 +138,7 @@
   <div class="tab" data-tab="details" onclick="showTab('details')">🪨 Details</div>
   <div class="tab" data-tab="addons" onclick="showTab('addons')">➕ Add-Ons</div>
   <div class="tab" data-tab="joints" onclick="showTab('joints')">📐 Joints &amp; Cuts</div>
+  <div class="tab" data-tab="demo" onclick="showTab('demo')">🔨 Demo</div>
   <div class="tab" data-tab="summary" onclick="showTab('summary')">💰 Summary</div>
   <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Reset</div>
 </div>
@@ -156,7 +157,7 @@
     <div class="field"><label>Site Address</label><input type="text" data-bind="client.address" placeholder="123 Example St, Gold Coast"></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
-    <div class="field"><label>Quote Reference #</label><input type="text" data-bind="client.ref"></div>
+    <div class="field"><label>Quote Reference #</label><input type="text" data-bind="client.ref" placeholder="Assigned automatically when you hit Save"></div>
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">Notes</div></div>
   <div class="card-body">
@@ -206,13 +207,19 @@
   <div class="card"><div class="card-header"><div class="card-title">Spalling Repair <span class="badge" id="badge-spalling">$0</span></div></div>
   <div class="card-body">
     <div class="row">
-      <div class="field"><label>Small (M&amp;M) $15/ea</label><input type="number" data-bind="spalling.small" min="0" value="0"></div>
-      <div class="field"><label>Medium (Golf Ball) $30/ea</label><input type="number" data-bind="spalling.med" min="0" value="0"></div>
+      <div class="field"><label>Small (M&amp;M) $35/ea</label><input type="number" data-bind="spalling.small" min="0" value="0"></div>
+      <div class="field"><label>Medium (Golf Ball) $55/ea</label><input type="number" data-bind="spalling.med" min="0" value="0"></div>
     </div>
     <div class="row">
-      <div class="field"><label>Large (Fist+) $50/ea</label><input type="number" data-bind="spalling.large" min="0" value="0"></div>
-      <div class="field"><label>Patched Area m² @$40</label><input type="number" data-bind="spalling.area" min="0" step="0.1" value="0"></div>
+      <div class="field"><label>Large (Fist+) $90/ea</label><input type="number" data-bind="spalling.large" min="0" value="0"></div>
+      <div class="field"><label>Patched Area m² @$110</label><input type="number" data-bind="spalling.area" min="0" step="0.1" value="0"></div>
     </div>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Ramping / Build-Up Repair <span class="badge" id="badge-ramping">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ DRAFT — Epoxy + Sand Build-Up is the primary option (2L epoxy + 20kg sand per batch, $55/batch, coverage rate 1.8kg/mm/m² is an ESTIMATE — not yet confirmed with Con-Treat — × 2.2 labour/margin multiplier). Rapidset Repair Mortar ($48.74/10kg bucket, 1.4kg/mm/m², confirmed) is selectable as the alternative. Review before this goes on a live quote — use the override on Summary to set the real price.</div>
+    <div id="rampList"></div>
+    <button class="btn-add" onclick="addRamp()">＋ Add Ramp</button>
   </div></div>
   <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
 </div>
@@ -238,6 +245,45 @@
     <div class="info-box" style="font-size:11px;">Saw-cut control joints. $12/lm.</div>
     <div id="softCutList"></div>
     <button class="btn-add" onclick="addSoftCut()">＋ Add Soft Cut</button>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Silicone Joint Filling <span class="badge" id="badge-silJoints">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ PROVISIONAL — $8/lm, confirming with supplier before this goes live on a quote.</div>
+    <div id="silJointList"></div>
+    <button class="btn-add" onclick="addSilJoint()">＋ Add Silicone Joint</button>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Polyurethane Joint Filling <span class="badge" id="badge-polyJoints">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ PROVISIONAL — $18/lm, confirming with supplier before this goes live on a quote.</div>
+    <div id="polyJointList"></div>
+    <button class="btn-add" onclick="addPolyJoint()">＋ Add Polyurethane Joint</button>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Core Drilling <span class="badge" id="badge-coreDrill">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;">25mm weep hole $220 is your confirmed rate. Larger sizes are market-based tiers — adjust if needed. PVC pipe supply &amp; fit +$45/hole · Silicone seal finish +$25/hole.</div>
+    <div id="coreHoleList"></div>
+    <button class="btn-add" onclick="addCoreHole()">＋ Add Core Hole</button>
+  </div></div>
+  <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
+</div>
+
+<div id="tab-demo" class="section">
+  <div class="card"><div class="card-header"><div class="card-title">Surface Removal <span class="badge" id="badge-demoSurface">$0</span></div></div>
+  <div class="card-body">
+    <div class="field"><label>Carpet &amp; Underlay Removal — m² @$15</label><input type="number" data-bind="demo.carpet" min="0" step="0.5" value="0"></div>
+    <div class="field"><label>Laminate/Floating Floor Removal — m² @$28</label><input type="number" data-bind="demo.laminate" min="0" step="0.5" value="0"></div>
+    <div class="field"><label>Glued Vinyl Removal — m² @$40</label><input type="number" data-bind="demo.vinyl" min="0" step="0.5" value="0"></div>
+    <div class="field"><label>Tile Removal, Standard/Large Format (Glued) — m² @$45</label><input type="number" data-bind="demo.tile" min="0" step="0.5" value="0"></div>
+    <div class="field"><label>Tile Removal, Mosaic/Small Format (Glued) — m² @$60</label><input type="number" data-bind="demo.tileMosaic" min="0" step="0.5" value="0"></div>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Kitchen Strip-Out <span class="badge" id="badge-demoKitchen">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;">Priced by measured floor area — up to 6m² $1,200 · 6.01–10m² $2,800 · 10.01m²+ $4,800.</div>
+    <div class="field"><label>Kitchen Floor Area (m²)</label><input type="number" data-bind="demo.kitchenArea" min="0" step="0.5" value="0"></div>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Overhead/Upper Cabinetry <span class="badge" id="badge-demoCabinetry">$0</span></div></div>
+  <div class="card-body">
+    <div class="field"><label>Cabinet Run Removed — lm @$60</label><input type="number" data-bind="demo.cabinetryLm" min="0" step="0.5" value="0"></div>
   </div></div>
   <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
 </div>
@@ -284,6 +330,19 @@
   <div class="card-body">
     <div id="customItems"></div>
     <button class="btn-add" onclick="addCustomItem()">＋ Add Custom Item</button>
+  </div></div>
+
+  <div class="card"><div class="card-header"><div class="card-title">Travel</div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Enter billable km beyond that — charged at $1.75/km.</div>
+    <div class="field"><label>Billable Travel (km) @ $1.75/km</label><input type="number" data-bind="custom.travelKm" min="0" step="1" value="0"></div>
+  </div></div>
+
+  <div class="card"><div class="card-header"><div class="card-title">Care Plan Promo</div></div>
+  <div class="card-body">
+    <div class="toggle-row"><div class="toggle-label">Print Care Plan offer on quote PDF</div>
+    <label class="toggle-switch"><input type="checkbox" id="carePromoToggle" onchange="S.custom.carePromo=this.checked;calcAll()"><span class="toggle-slider"></span></label></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">Adds a short Care Plan pitch box to the quote — turns every quote into a Care Plan lead. No pricing shown.</div>
   </div></div>
 
   <div class="card"><div class="card-header"><div class="card-title">AI Floor Visualiser</div></div>
@@ -341,7 +400,7 @@ const PRICE = {
   flakeUp: { 'Standard':0, 'Marble Tone':5, 'Stone Grip':5, 'Natural Stone':10, 'Classic XL':8, 'Special Blend':12 },
   conc: { 'Hard':0, 'Medium':0, 'Soft':20 },
   coat: { 'None':0, 'Single Paint':10, 'Multi-Paint':20, 'Epoxy Removal':40, 'Poxit Overlay':0 },
-  addons: { nonslip:10, mvb:20, xtopcoat:15, turnup:30, silicone:18, coving:50, border:35 },
+  addons: { nonslip:10, mvb:20, xtopcoat:15, turnup:30, silicone:18, coving:65, border:35 },
   fastcure: { '1':20, '2':40 },
   logo: { '150':'Over-Flake Small — $150', '250':'Over-Flake Medium — $250', '200':'Flat/Dead-Flat Small — $200', '350':'Flat/Dead-Flat Medium — $350' },
   stencil: { '25':'Easy — $25/m²', '40':'Medium — $40/m²', '60':'Hard — $60/m²', '85':'Very Hard — $85/m²' },
@@ -349,16 +408,25 @@ const PRICE = {
   seal: { 'Essential Seal':20, 'Premium Matte':30, 'Premium Gloss':35, 'Elite Matte':40, 'Elite Gloss':45 },
   sealMin: { 'Essential Seal':200, 'Premium Matte':250, 'Premium Gloss':280, 'Elite Matte':300, 'Elite Gloss':350 },
   sealDesc: { 'Essential Seal':'Entry · damp-tolerant penetrating · satin', 'Premium Matte':'Solvent acrylic · natural/low sheen', 'Premium Gloss':'Solvent wet-look enhancer', 'Elite Matte':'Semi-penetrating · tough · longest matte life', 'Elite Gloss':'2-pack UV gloss · max durability' },
-  gs: { 'Premium Grind & Seal':75, 'Elite Grind & Seal':90 },
-  gsMin: { 'Premium Grind & Seal':400, 'Elite Grind & Seal':450 },
+  gs: { 'Premium Grind & Seal':85, 'Elite Grind & Seal':90 },
+  gsMin: { 'Premium Grind & Seal':450, 'Elite Grind & Seal':450 },
   gsDesc: { 'Premium Grind & Seal':'Grind prep + Premium matte seal · complete finish', 'Elite Grind & Seal':'Grind prep + Elite matte seal · complete finish' },
   aqua: 20,
-  grindType: { 'Light Surface Prep':40, 'Medium Grind':45, 'Heavy Grind/Levelling':50 },
+  grindType: { 'Light Surface Prep':40, 'Medium Grind':45, 'Heavy Grind/Levelling':65 },
   grindMvb: 20, trip: 80, lip: 60,
   polished: 120,
-  joint: 30, routing: 8, softcut: 12,
-  crackRate: 20, crackMin: 80,
-  spall: { small:15, med:30, large:50, area:40 },
+  joint: 40, routing: 8, softcut: 12,
+  silJoint: 8, polyJoint: 18,
+  crackRate: 40, crackMin: 120,
+  spall: { small:35, med:55, large:90, area:110 },
+  demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, cabinetry:60 },
+  kitchenStrip: [ {max:6, price:1200}, {max:10, price:2800}, {max:Infinity, price:4800} ],
+  pwUpsell: { '2':180, '3':230, '4':280, '5':340 },
+  pwUpsellMods: { doubleStorey:90, diffAccess:40 },
+  rampMortarBucketKg: 10, rampMortarBucketCost: 48.74, rampCoverage: 1.4,
+  rampEpoxyBatchKg: 22.2, rampEpoxyBatchCost: 55, rampEpoxyCoverage: 1.8, rampEpoxyMultiplier: 2.2,
+  coreDrill: { '25mm (Weep Hole)': 220, 'Up to 75mm': 250, 'Up to 102mm': 300, 'Up to 152mm': 380 },
+  coreDrillPvc: 45, coreDrillSilicone: 25,
   care: { 'Level 2 Refresh Coat': {rate:20,min:500}, 'Level 3 Full Rejuvenation': {rate:32,min:900}, 'Level 3 + Reflake': {rate:44,min:900} },
   careNonslip: 10,
   shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 }
@@ -367,7 +435,7 @@ const SERVICES = [
   { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic — from $85/m²' },
   { key:'tinted',   icon:'🎨', name:'Tinted Sealant', rate:'Pressure wash $30/m² · Grind prep $45/m²' },
   { key:'seal',     icon:'💧', name:'Cleaning &amp; Sealing', rate:'Seal only — $20–$45/m²' },
-  { key:'gs',       icon:'🪓', name:'Grind &amp; Seal', rate:'Prep + seal — Premium $75/m² · Elite $90/m²' },
+  { key:'gs',       icon:'🪓', name:'Grind &amp; Seal', rate:'Prep + seal — Premium $85/m² · Elite $90/m²' },
   { key:'grind',    icon:'⚙️', name:'Concrete Grinding', rate:'$40–$50/m²' },
   { key:'polished', icon:'✨', name:'Polished Concrete', rate:'Mechanical polish — $120/m²' },
   { key:'care',     icon:'♻️', name:'Care Plan Refresh', rate:'Existing care plan clients' },
@@ -380,8 +448,11 @@ function freshState() {
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
-    joints: [], softCuts: [],
-    custom: { adjustType:'none', adjustAmount:0, items: [] },
+    joints: [], softCuts: [], siliconeJoints: [], polyJoints: [], coreHoles: [],
+    ramps: [],
+    demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, kitchenArea:0, cabinetryLm:0 },
+    pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
+    custom: { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false },
     overrides: {}
   };
 }
@@ -421,7 +492,7 @@ function syncBoundInputs() {
   });
 }
 
-const NAV = ['client','measure','services','repairs','details','addons','joints','summary'];
+const NAV = ['client','measure','services','repairs','details','addons','joints','demo','summary'];
 let currentTab = 'client';
 function showTab(name) {
   currentTab = name;
@@ -641,11 +712,12 @@ function rmZone(listName, i) { S[listName].splice(i,1); renderDetails(); renderA
 // ===== ADD-ONS TAB =====
 function renderAddons() {
   const c = document.getElementById('addonsContainer');
+  let h = pwUpsellCard();
   if (S.epoxyZones.length === 0) {
-    c.innerHTML = '<div class="info-box">Add-ons apply to <strong>epoxy floor zones</strong>. Add an epoxy zone in Details first.</div>';
+    h += '<div class="info-box">Epoxy zone add-ons (non-slip, MVB, turn-ups etc.) apply to <strong>epoxy floor zones</strong>. Add an epoxy zone in Details first.</div>';
+    c.innerHTML = h;
     return;
   }
-  let h = '';
   S.epoxyZones.forEach(function(z, i) {
     const a = z.addons;
     h += '<div class="card"><div class="card-header"><div class="card-title">🪨 ' + (z.name || 'Epoxy Zone ' + (i+1)) + '</div></div><div class="card-body">' +
@@ -663,7 +735,7 @@ function renderAddons() {
         '<div class="field"><label>Turn-up Length (lm)</label><input type="number" value="' + a.turnupLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.turnupLm=parseFloat(this.value)||0;calcAll()"></div>' +
         tgl(i,'silicone','Silicone Bead','+$18/lm',a.silicone) +
         (a.silicone ? '<div class="field"><label>Silicone Length (lm)</label><input type="number" value="' + a.silicLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.silicLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
-        tgl(i,'coving','Coving (Epoxy/Sand Cove)','+$50/lm',a.coving) +
+        tgl(i,'coving','Coving (Epoxy/Sand Cove)','+$65/lm',a.coving) +
         (a.coving ? '<div class="field"><label>Coving Length (lm)</label><input type="number" value="' + a.covingLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.covingLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
         '</div>' : '') +
       '<div class="toggle-row"><div class="toggle-label">Decorative Border/Banding</div><div class="toggle-price">$35/lm</div>' +
@@ -683,6 +755,26 @@ function renderAddons() {
   });
   c.innerHTML = h;
 }
+function pwUpsellCard() {
+  const p = S.pwUpsell;
+  return '<div class="card"><div class="card-header"><div class="card-title">🧼 Pressure Cleaning Upsell <span class="badge" id="badge-pwUpsell">$0</span></div></div>' +
+    '<div class="card-body">' +
+    '<div class="info-box" style="font-size:11px;">Full external house wash offered after the site clean, while equipment is already mobilised.</div>' +
+    '<div class="toggle-row"><div class="toggle-label">Offer Pressure Cleaning Upsell</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (p.enabled?'checked':'') + ' onchange="S.pwUpsell.enabled=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (p.enabled ? '<div class="field"><label>Bedrooms</label><div class="radio-group">' +
+      ['2','3','4','5'].map(function(v){ return '<div class="radio-pill ' + (v===p.beds?'selected':'') + '" onclick="setPwBeds(0,\'' + v + '\')">' + (v==='5'?'5+':v) + ' bed</div>'; }).join('') +
+      '</div></div>' +
+      '<div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">2 bed $180 · 3 bed $230 · 4 bed $280 · 5+ bed $340</div>' +
+      '<div class="toggle-row"><div class="toggle-label">Double Storey</div><div class="toggle-price">+$90</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (p.doubleStorey?'checked':'') + ' onchange="setPwMod(\'doubleStorey\',this.checked)"><span class="toggle-slider"></span></label></div>' +
+      '<div class="toggle-row"><div class="toggle-label">Difficult Access</div><div class="toggle-price">+$40</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (p.diffAccess?'checked':'') + ' onchange="setPwMod(\'diffAccess\',this.checked)"><span class="toggle-slider"></span></label></div>'
+      : '') +
+    '</div></div>';
+}
+function setPwBeds(idx, val) { S.pwUpsell.beds = val; renderAddons(); calcAll(); }
+function setPwMod(key, val) { S.pwUpsell[key] = val; renderAddons(); calcAll(); }
 function tgl(i, key, label, price, checked) {
   return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price">' + price + '</div>' +
     '<label class="toggle-switch"><input type="checkbox" ' + (checked?'checked':'') + ' onchange="setA(' + i + ',\'' + key + '\',this.checked)"><span class="toggle-slider"></span></label></div>';
@@ -707,7 +799,7 @@ function renderJoints() {
     return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
       '<div class="field"><label>Description</label><input type="text" value="' + j.name + '" placeholder="Control joint A" oninput="S.joints[' + i + '].name=this.value"></div>' +
       '<button class="btn-remove" onclick="rmJoint(' + i + ')">✕</button></div>' +
-      '<div class="field"><label>Length (lm) — Polyurea $30/lm</label><input type="number" value="' + j.lm + '" step="0.5" min="0" oninput="S.joints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div>' +
+      '<div class="field"><label>Length (lm) — Polyurea $40/lm</label><input type="number" value="' + j.lm + '" step="0.5" min="0" oninput="S.joints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div>' +
       '<div class="toggle-row"><div class="toggle-label">Routing Add-on</div><div class="toggle-price">+$8/lm</div>' +
       '<label class="toggle-switch"><input type="checkbox" ' + (j.routed?'checked':'') + ' onchange="S.joints[' + i + '].routed=this.checked;calcAll()"><span class="toggle-slider"></span></label></div><hr class="divider"></div>';
   }).join('');
@@ -720,6 +812,95 @@ function renderSoftCuts() {
       '<div class="field"><label>Description</label><input type="text" value="' + s.name + '" placeholder="e.g. Garage slab soft cuts" oninput="S.softCuts[' + i + '].name=this.value"></div>' +
       '<button class="btn-remove" onclick="rmSoftCut(' + i + ')">✕</button></div>' +
       '<div class="field"><label>Length (lm) @ $12/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.softCuts[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
+  }).join('');
+}
+function addSilJoint() { S.siliconeJoints.push({ name:'', lm:0 }); renderSilJoints(); calcAll(); }
+function rmSilJoint(i) { S.siliconeJoints.splice(i,1); renderSilJoints(); calcAll(); }
+function renderSilJoints() {
+  document.getElementById('silJointList').innerHTML = S.siliconeJoints.map(function(s,i) {
+    return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
+      '<div class="field"><label>Description</label><input type="text" value="' + s.name + '" placeholder="e.g. Perimeter joints" oninput="S.siliconeJoints[' + i + '].name=this.value"></div>' +
+      '<button class="btn-remove" onclick="rmSilJoint(' + i + ')">✕</button></div>' +
+      '<div class="field"><label>Length (lm) @ $8/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.siliconeJoints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
+  }).join('');
+}
+function addPolyJoint() { S.polyJoints.push({ name:'', lm:0 }); renderPolyJoints(); calcAll(); }
+function rmPolyJoint(i) { S.polyJoints.splice(i,1); renderPolyJoints(); calcAll(); }
+function renderPolyJoints() {
+  document.getElementById('polyJointList').innerHTML = S.polyJoints.map(function(s,i) {
+    return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
+      '<div class="field"><label>Description</label><input type="text" value="' + s.name + '" placeholder="e.g. Expansion joints" oninput="S.polyJoints[' + i + '].name=this.value"></div>' +
+      '<button class="btn-remove" onclick="rmPolyJoint(' + i + ')">✕</button></div>' +
+      '<div class="field"><label>Length (lm) @ $18/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.polyJoints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
+  }).join('');
+}
+function addCoreHole() { S.coreHoles.push({ name:'', size:'25mm (Weep Hole)', qty:1, pvc:false, silicone:false }); renderCoreHoles(); calcAll(); }
+function rmCoreHole(i) { S.coreHoles.splice(i,1); renderCoreHoles(); calcAll(); }
+function coreHolePrice(h) {
+  const base = PRICE.coreDrill[h.size] || 220;
+  const per = base + (h.pvc ? PRICE.coreDrillPvc : 0) + (h.silicone ? PRICE.coreDrillSilicone : 0);
+  return per * (h.qty || 1);
+}
+function renderCoreHoles() {
+  document.getElementById('coreHoleList').innerHTML = S.coreHoles.map(function(h,i) {
+    return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
+      '<div class="field"><label>Description</label><input type="text" value="' + h.name + '" placeholder="e.g. Garage weep holes" oninput="S.coreHoles[' + i + '].name=this.value"></div>' +
+      '<button class="btn-remove" onclick="rmCoreHole(' + i + ')">✕</button></div>' +
+      '<div class="row">' +
+      '<div class="field"><label>Hole Size</label><select onchange="S.coreHoles[' + i + '].size=this.value;calcAll()">' +
+      Object.keys(PRICE.coreDrill).map(function(sz){ return '<option value="' + sz + '" ' + (h.size===sz?'selected':'') + '>' + sz + ' — $' + PRICE.coreDrill[sz] + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="field"><label>Qty</label><input type="number" value="' + h.qty + '" min="1" oninput="S.coreHoles[' + i + '].qty=parseInt(this.value)||1;calcAll()"></div>' +
+      '</div>' +
+      '<div class="toggle-row"><div class="toggle-label">Supply &amp; Fit PVC Pipe</div><div class="toggle-price">+$45/hole</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (h.pvc?'checked':'') + ' onchange="S.coreHoles[' + i + '].pvc=this.checked;calcAll()"><span class="toggle-slider"></span></label></div>' +
+      '<div class="toggle-row"><div class="toggle-label">Silicone Seal Finish</div><div class="toggle-price">+$25/hole</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (h.silicone?'checked':'') + ' onchange="S.coreHoles[' + i + '].silicone=this.checked;calcAll()"><span class="toggle-slider"></span></label></div>' +
+      '<hr class="divider"></div>';
+  }).join('');
+}
+function addRamp() { S.ramps.push({ name:'', rise:0, width:0, ratio:12, material:'epoxysand' }); renderRamps(); calcAll(); }
+function rmRamp(i) { S.ramps.splice(i,1); renderRamps(); calcAll(); }
+function calcRamp(r) {
+  const riseM = (r.rise||0) / 1000;
+  const lengthM = riseM * (r.ratio||12);
+  const footprintM2 = lengthM * (r.width||0);
+  const avgThicknessMm = (r.rise||0) / 2;
+  const material = r.material || 'epoxysand';
+  if (material === 'rapidset') {
+    const kgNeeded = PRICE.rampCoverage * avgThicknessMm * footprintM2;
+    const buckets = kgNeeded > 0 ? Math.ceil(kgNeeded / PRICE.rampMortarBucketKg) : 0;
+    const cost = buckets * PRICE.rampMortarBucketCost;
+    return { material:material, lengthM:lengthM, footprintM2:footprintM2, kgNeeded:kgNeeded, buckets:buckets, materialsCost:cost, cost:cost };
+  }
+  const kgNeeded = PRICE.rampEpoxyCoverage * avgThicknessMm * footprintM2;
+  const batches = kgNeeded > 0 ? Math.ceil(kgNeeded / PRICE.rampEpoxyBatchKg) : 0;
+  const materialsCost = batches * PRICE.rampEpoxyBatchCost;
+  const cost = materialsCost * PRICE.rampEpoxyMultiplier;
+  return { material:material, lengthM:lengthM, footprintM2:footprintM2, kgNeeded:kgNeeded, batches:batches, materialsCost:materialsCost, cost:cost };
+}
+function renderRamps() {
+  document.getElementById('rampList').innerHTML = S.ramps.map(function(r,i) {
+    const c = calcRamp(r);
+    return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
+      '<div class="field"><label>Description</label><input type="text" value="' + r.name + '" placeholder="e.g. Garage entry ramp" oninput="S.ramps[' + i + '].name=this.value"></div>' +
+      '<button class="btn-remove" onclick="rmRamp(' + i + ')">✕</button></div>' +
+      '<div class="row">' +
+      '<div class="field"><label>Rise (mm)</label><input type="number" value="' + r.rise + '" step="1" min="0" oninput="S.ramps[' + i + '].rise=parseFloat(this.value)||0;calcAll()"></div>' +
+      '<div class="field"><label>Width (m)</label><input type="number" value="' + r.width + '" step="0.1" min="0" oninput="S.ramps[' + i + '].width=parseFloat(this.value)||0;calcAll()"></div>' +
+      '</div>' +
+      '<div class="field"><label>Slope Ratio — 1 : ' + r.ratio + '</label><input type="number" value="' + r.ratio + '" step="1" min="1" oninput="S.ramps[' + i + '].ratio=parseFloat(this.value)||12;calcAll()"></div>' +
+      '<div class="field"><label>Build-Up Material</label><select onchange="S.ramps[' + i + '].material=this.value;renderRamps();calcAll()">' +
+        '<option value="epoxysand"' + ((r.material||'epoxysand')==='epoxysand' ? ' selected' : '') + '>Epoxy + Sand Build-Up (primary)</option>' +
+        '<option value="rapidset"' + (r.material==='rapidset' ? ' selected' : '') + '>Rapidset Repair Mortar</option>' +
+      '</select></div>' +
+      '<div style="background:var(--dark);border-radius:8px;padding:10px;margin-top:6px;font-size:11px;color:var(--muted);line-height:1.7;">' +
+      'Ramp length: <strong style="color:var(--white);">' + c.lengthM.toFixed(2) + 'm</strong> · Footprint: <strong style="color:var(--white);">' + c.footprintM2.toFixed(2) + 'm²</strong><br>' +
+      ((r.material||'epoxysand')==='epoxysand'
+        ? 'Mix needed: <strong style="color:var(--white);">' + c.kgNeeded.toFixed(1) + 'kg</strong> (' + c.batches + ' × 22.2kg batch' + (c.batches===1?'':'es') + ' — 2L epoxy + 20kg sand)<br>Materials: <strong style="color:var(--white);">' + fmt(c.materialsCost) + '</strong> × 2.2 labour/margin multiplier<br>'
+        : 'Mortar needed: <strong style="color:var(--white);">' + c.kgNeeded.toFixed(1) + 'kg</strong> (' + c.buckets + ' × 10kg bucket' + (c.buckets===1?'':'s') + ')<br>') +
+      'Ramp price: <strong style="color:var(--gold);">' + fmt(c.cost) + '</strong>' +
+      '</div><hr class="divider"></div>';
   }).join('');
 }
 function addCustomItem() { S.custom.items.push({ desc:'', price:0 }); renderCustomItems(); calcAll(); }
@@ -808,6 +989,11 @@ function populateMeasureDest() {
     }
   });
   if (S.services['epoxy'] || S.spalling) o += '<option value="spalling.area">🔧 Spalling — Patched Area</option>';
+  o += '<option value="demo.carpet">🔨 Demo — Carpet Removal</option>';
+  o += '<option value="demo.laminate">🔨 Demo — Laminate Removal</option>';
+  o += '<option value="demo.vinyl">🔨 Demo — Glued Vinyl Removal</option>';
+  o += '<option value="demo.tile">🔨 Demo — Tile Std/Large Removal</option>';
+  o += '<option value="demo.tileMosaic">🔨 Demo — Tile Mosaic Removal</option>';
   sel.innerHTML = o;
   if (cur) sel.value = cur;
 }
@@ -963,6 +1149,70 @@ function buildSections() {
     scAdd.push({ label:(s.name||'Soft Cut '+(i+1)) + ' — ' + s.lm + 'lm @ $12/lm', price:p });
   });
   if (scSub > 0) sections.push({ key:'softcuts', category:'🔪 Soft Cuts', zoneName:'', desc:'', addons:scAdd, subtotal:scSub });
+  let silSub = 0; const silAdd = [];
+  S.siliconeJoints.forEach(function(j,i) {
+    if (!j.lm) return;
+    const p = j.lm * PRICE.silJoint;
+    silSub += p;
+    silAdd.push({ label:(j.name||'Silicone Joint '+(i+1)) + ' — ' + j.lm + 'lm @ $8/lm', price:p });
+  });
+  if (silSub > 0) sections.push({ key:'silJoints', category:'📐 Silicone Joint Filling', zoneName:'', desc:'', addons:silAdd, subtotal:silSub });
+  let polySub = 0; const polyAdd = [];
+  S.polyJoints.forEach(function(j,i) {
+    if (!j.lm) return;
+    const p = j.lm * PRICE.polyJoint;
+    polySub += p;
+    polyAdd.push({ label:(j.name||'Polyurethane Joint '+(i+1)) + ' — ' + j.lm + 'lm @ $18/lm', price:p });
+  });
+  if (polySub > 0) sections.push({ key:'polyJoints', category:'📐 Polyurethane Joint Filling', zoneName:'', desc:'', addons:polyAdd, subtotal:polySub });
+  let coreSub = 0; const coreAdd = [];
+  S.coreHoles.forEach(function(h,i) {
+    if (!(h.qty > 0)) return;
+    const p = coreHolePrice(h);
+    coreSub += p;
+    let lbl = (h.name||'Core Hole '+(i+1)) + ' — ' + h.size + ' × ' + h.qty;
+    const extras = [];
+    if (h.pvc) extras.push('PVC pipe fitted');
+    if (h.silicone) extras.push('silicone sealed');
+    if (extras.length) lbl += ' (' + extras.join(', ') + ')';
+    coreAdd.push({ label:lbl, price:p });
+  });
+  if (coreSub > 0) sections.push({ key:'coreDrill', category:'🕳 Core Drilling', zoneName:'', desc:'', addons:coreAdd, subtotal:coreSub });
+  let rampSub = 0; const rampAdd = [];
+  S.ramps.forEach(function(r,i) {
+    if (!r.rise || !r.width) return;
+    const c = calcRamp(r);
+    rampSub += c.cost;
+    const matLabel = c.material === 'rapidset' ? (c.buckets + ' × 10kg Rapidset bucket' + (c.buckets===1?'':'s')) : ('Epoxy + Sand Build-Up, ' + c.batches + ' batch' + (c.batches===1?'':'es'));
+    rampAdd.push({ label:(r.name||'Ramp '+(i+1)) + ' — ' + r.rise + 'mm rise × ' + r.width + 'm wide (' + matLabel + ')', price:c.cost });
+  });
+  if (rampSub > 0) sections.push({ key:'ramping', category:'🛠 Ramping / Build-Up Repair', zoneName:'', desc:'', addons:rampAdd, subtotal:rampSub });
+  const d = S.demo; const dAdd = []; let dSub = 0;
+  if (d.carpet > 0) { const p = d.carpet*PRICE.demo.carpet; dSub += p; dAdd.push({label:'Carpet & Underlay — ' + d.carpet + 'm²', price:p}); }
+  if (d.laminate > 0) { const p = d.laminate*PRICE.demo.laminate; dSub += p; dAdd.push({label:'Laminate/Floating Floor — ' + d.laminate + 'm²', price:p}); }
+  if (d.vinyl > 0) { const p = d.vinyl*PRICE.demo.vinyl; dSub += p; dAdd.push({label:'Glued Vinyl Removal — ' + d.vinyl + 'm²', price:p}); }
+  if (d.tile > 0) { const p = d.tile*PRICE.demo.tile; dSub += p; dAdd.push({label:'Tile Removal, Standard/Large (Glued) — ' + d.tile + 'm²', price:p}); }
+  if (d.tileMosaic > 0) { const p = d.tileMosaic*PRICE.demo.tileMosaic; dSub += p; dAdd.push({label:'Tile Removal, Mosaic/Small (Glued) — ' + d.tileMosaic + 'm²', price:p}); }
+  if (d.kitchenArea > 0) {
+    const bracket = PRICE.kitchenStrip.find(function(b){ return d.kitchenArea <= b.max; });
+    const p = bracket ? bracket.price : 0;
+    dSub += p;
+    dAdd.push({label:'Kitchen Strip-Out — ' + d.kitchenArea + 'm²', price:p});
+  }
+  if (d.cabinetryLm > 0) { const p = d.cabinetryLm*PRICE.demo.cabinetry; dSub += p; dAdd.push({label:'Overhead/Upper Cabinetry — ' + d.cabinetryLm + 'lm', price:p}); }
+  if (dSub > 0) sections.push({ key:'demo', category:'🔨 Demolition & Strip-Out', zoneName:'', desc:'', addons:dAdd, subtotal:dSub });
+  if (S.pwUpsell.enabled) {
+    const p = S.pwUpsell;
+    let pwSub = PRICE.pwUpsell[p.beds] || 0;
+    const pwAdd = [{ label:(p.beds==='5'?'5+':p.beds) + ' Bedroom Wash', price:PRICE.pwUpsell[p.beds]||0 }];
+    if (p.doubleStorey) { pwSub += PRICE.pwUpsellMods.doubleStorey; pwAdd.push({label:'Double Storey', price:PRICE.pwUpsellMods.doubleStorey}); }
+    if (p.diffAccess) { pwSub += PRICE.pwUpsellMods.diffAccess; pwAdd.push({label:'Difficult Access', price:PRICE.pwUpsellMods.diffAccess}); }
+    if (pwSub > 0) sections.push({ key:'pwUpsell', category:'🧼 Pressure Cleaning Upsell', zoneName:'', desc:'Full external house wash — offered post-site-clean', addons:pwAdd, subtotal:pwSub });
+  }
+  if (S.custom.travelKm > 0) {
+    const tCost = S.custom.travelKm * 1.75;
+    sections.push({ key:'travel', category:'🚗 Travel', zoneName:'', desc:S.custom.travelKm + 'km beyond 25km of Coomera @ $1.75/km', addons:[], subtotal:tCost });
+  }
   return sections;
 }
 function effSub(sec) {
@@ -1016,6 +1266,17 @@ function calcAll() {
   badge('badge-spalling', sumKeys('spalling'));
   badge('badge-joints', sumKeys('joints'));
   badge('badge-softcuts', sumKeys('softcuts'));
+  badge('badge-silJoints', sumKeys('silJoints'));
+  badge('badge-polyJoints', sumKeys('polyJoints'));
+  badge('badge-coreDrill', sumKeys('coreDrill'));
+  badge('badge-ramping', sumKeys('ramping'));
+  badge('badge-pwUpsell', sumKeys('pwUpsell'));
+  (function() {
+    badge('badge-demoSurface', (S.demo.carpet*PRICE.demo.carpet)+(S.demo.laminate*PRICE.demo.laminate)+(S.demo.vinyl*PRICE.demo.vinyl)+(S.demo.tile*PRICE.demo.tile)+(S.demo.tileMosaic*PRICE.demo.tileMosaic));
+    const bracket = PRICE.kitchenStrip.find(function(b){ return S.demo.kitchenArea <= b.max; });
+    badge('badge-demoKitchen', S.demo.kitchenArea > 0 && bracket ? bracket.price : 0);
+    badge('badge-demoCabinetry', S.demo.cabinetryLm*PRICE.demo.cabinetry);
+  })();
 
   const adjLbl = document.getElementById('adjustLabel');
   const adjVal = document.getElementById('adjustValue');
@@ -1183,7 +1444,7 @@ function generatePDF() {
   });
   if (adjustment !== 0) rows += '<tr class="zone-row"><td><span class="zone-cat">' + (adjustment<0?'Discount':'Markup') + '</span></td><td class="price-col zone-price">' + (adjustment<0?'-':'+') + fmt(Math.abs(adjustment)) + '</td></tr>';
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
-    '<title>Poxit Quote — ' + c.ref + '</title><style>' + docCSS() + '</style></head><body>' +
+    '<title>Poxit Quote — ' + (c.ref || client) + '</title><style>' + docCSS() + '</style></head><body>' +
     docHeader('QUOTE / SCOPE OF WORKS') +
     '<div class="doc-body"><div class="client-box">' +
     '<div class="client-row"><div class="client-label">Client Full Name:</div><div class="client-value">' + client + '</div></div>' +
@@ -1204,6 +1465,7 @@ function generatePDF() {
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Payment Terms</span></div>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;">All quotes are valid for <strong>30 days</strong> from the date of issue. A <strong>50% non-refundable deposit</strong> is required to confirm booking and reserve the job date. Remaining 50% is due on <strong>completion of work before Poxit leaves the site</strong>.</p>' +
     (c.clientNotes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
+    (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
     '</div>' + docFooter() +
     '<scr' + 'ipt>window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
   openDoc(html);
@@ -1270,6 +1532,11 @@ function generateInvoice() {
 }
 // ===== SAVE / LOAD / DELETE =====
 async function saveQuote() {
+  const today = new Date();
+  const num = (parseInt(localStorage.getItem('poxit_quote_num') || '0') + 1);
+  localStorage.setItem('poxit_quote_num', num);
+  S.client.ref = 'PXT-' + today.getFullYear() + '-' + ('00' + num).slice(-3);
+  syncBoundInputs();
   const name = (S.client.first + ' ' + S.client.last).trim() || 'Unnamed Quote';
   const total = calcAll();
   const key = 'PXT-' + Date.now();
@@ -1369,7 +1636,10 @@ function restoreQuote(payload) {
   if (payload.state) {
     S = Object.assign(freshState(), payload.state);
     if (!S.overrides) S.overrides = {};
-    if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [] };
+    if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false };
+    if (S.custom.travelKm === undefined) S.custom.travelKm = 0;
+    if (S.custom.carePromo === undefined) S.custom.carePromo = false;
+    if (!S.coreHoles) S.coreHoles = [];
     measureShapes = payload.measureShapes || [];
   } else if (payload.client) {
     const old = payload;
@@ -1412,9 +1682,9 @@ function initDates() {
   const valid = new Date(today); valid.setDate(valid.getDate() + 30);
   S.client.date = f(today);
   S.client.valid = f(valid);
-  const num = (parseInt(localStorage.getItem('poxit_quote_num') || '0') + 1);
-  localStorage.setItem('poxit_quote_num', num);
-  S.client.ref = 'PXT-' + today.getFullYear() + '-' + ('00' + num).slice(-3);
+  // Ref is intentionally left blank here — it's assigned and persisted in saveQuote()
+  // so it auto-increments fresh on every Save (handles sending revisions cleanly).
+  S.client.ref = '';
 }
 function renderEverything() {
   renderServices();
@@ -1423,9 +1693,15 @@ function renderEverything() {
   renderCracks();
   renderJoints();
   renderSoftCuts();
+  renderSilJoints();
+  renderPolyJoints();
+  renderCoreHoles();
+  renderRamps();
   renderCustomItems();
   renderMeasure();
   syncBoundInputs();
+  const cpT = document.getElementById('carePromoToggle');
+  if (cpT) cpT.checked = !!S.custom.carePromo;
   calcAll();
 }
 
