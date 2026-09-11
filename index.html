@@ -155,6 +155,7 @@
     <div class="field"><label>Phone</label><input type="text" data-bind="client.phone" placeholder="04xx xxx xxx"></div>
     <div class="field"><label>Email</label><input type="text" data-bind="client.email" placeholder="john@email.com"></div>
     <div class="field"><label>Site Address</label><input type="text" data-bind="client.address" placeholder="123 Example St, Gold Coast"></div>
+    <div class="field"><label>Suburb (for travel estimate)</label><select id="clientSuburbSelect" onchange="applySuburbTravel(this.value)"></select></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
     <div class="field"><label>Quote Reference #</label><input type="text" data-bind="client.ref" placeholder="Assigned automatically when you hit Save"></div>
@@ -248,7 +249,7 @@
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">Silicone Joint Filling <span class="badge" id="badge-silJoints">$0</span></div></div>
   <div class="card-body">
-    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ PROVISIONAL — $8/lm, confirming with supplier before this goes live on a quote.</div>
+    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ PROVISIONAL — $16/lm, confirming with supplier before this goes live on a quote.</div>
     <div id="silJointList"></div>
     <button class="btn-add" onclick="addSilJoint()">＋ Add Silicone Joint</button>
   </div></div>
@@ -334,7 +335,7 @@
 
   <div class="card"><div class="card-header"><div class="card-title">Travel</div></div>
   <div class="card-body">
-    <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Enter billable km beyond that — charged at $1.75/km.</div>
+    <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Select the client's suburb on the Client tab to auto-fill an estimate, or enter billable km beyond 25km manually — charged at $1.75/km.</div>
     <div class="field"><label>Billable Travel (km) @ $1.75/km</label><input type="number" data-bind="custom.travelKm" min="0" step="1" value="0"></div>
   </div></div>
 
@@ -395,12 +396,127 @@
   </div>
 </div>
 <script>
+const SUBURB_TRAVEL_KM = {
+    "Pimpama QLD": 0,
+    "Coomera QLD": 0,
+    "Upper Coomera QLD": 0,
+    "Willow Vale QLD": 0,
+    "Coombabah QLD": 0,
+    "Runaway Bay QLD": 0,
+    "Paradise Point QLD": 0,
+    "Biggera Waters QLD": 0,
+    "Helensvale QLD": 0,
+    "Hope Island QLD": 0,
+    "Ormeau QLD": 0,
+    "Norwell QLD": 0,
+    "Ormeau Hills QLD": 0,
+    "Wongawallan QLD": 0,
+    "Oxenford QLD": 0,
+    "Labrador QLD": 0,
+    "Southport QLD": 0,
+    "Ashmore QLD": 0,
+    "Arundel QLD": 0,
+    "Molendinar QLD": 0,
+    "Beenleigh QLD": 0,
+    "Eagleby QLD": 0,
+    "Yatala QLD": 0,
+    "Main Beach QLD": 3,
+    "Surfers Paradise QLD": 3,
+    "Benowa QLD": 3,
+    "Bundall QLD": 3,
+    "Redland Bay QLD": 5,
+    "Victoria Point QLD": 5,
+    "Loganholme QLD": 6,
+    "Tamborine Mountain QLD": 6,
+    "Broadbeach QLD": 7,
+    "Broadbeach Waters QLD": 7,
+    "Mermaid Beach QLD": 7,
+    "Mermaid Waters QLD": 7,
+    "Robina QLD": 11,
+    "Merrimac QLD": 11,
+    "Clear Island Waters QLD": 11,
+    "Nerang QLD": 12,
+    "Carrara QLD": 12,
+    "Advancetown QLD": 12,
+    "Highland Park QLD": 12,
+    "Gilston QLD": 12,
+    "Beechmont QLD": 12,
+    "Springwood QLD": 14,
+    "Miami QLD": 14,
+    "Burleigh Heads QLD": 14,
+    "Burleigh Waters QLD": 14,
+    "Logan Central QLD": 16,
+    "Cleveland QLD": 16,
+    "Varsity Lakes QLD": 16,
+    "Reedy Creek QLD": 16,
+    "Jimboomba QLD": 17,
+    "Worongary QLD": 18,
+    "Mudgeeraba QLD": 18,
+    "Springbrook QLD": 18,
+    "Austinville QLD": 18,
+    "Rochedale QLD": 21,
+    "Elanora QLD": 21,
+    "Palm Beach QLD": 21,
+    "Sunnybank QLD": 23,
+    "Mount Gravatt QLD": 23,
+    "Browns Plains QLD": 23,
+    "Tallebudgera QLD": 23,
+    "Tallebudgera Valley QLD": 23,
+    "Currumbin QLD": 24,
+    "Currumbin Waters QLD": 24,
+    "Tugun QLD": 24,
+    "Bilinga QLD": 24,
+    "Kirra QLD": 24,
+    "Coolangatta QLD": 24,
+    "Canungra QLD": 24,
+    "Tweed Heads NSW": 26,
+    "Tweed Heads West NSW": 26,
+    "Tweed Heads South NSW": 28,
+    "Banora Point NSW": 28,
+    "Bilambil Heights NSW": 28,
+    "Terranora NSW": 28,
+    "Brisbane QLD": 35,
+    "Kingscliff NSW": 38,
+    "Casuarina NSW": 38,
+    "Cabarita Beach NSW": 46,
+    "Murwillumbah NSW": 49,
+    "Pottsville NSW": 52
+};
+
+function populateSuburbDropdown() {
+  const sel = document.getElementById('clientSuburbSelect');
+  if (!sel) return;
+  if (sel.options.length > 0) return;
+  let h = '<option value="">Select suburb (optional)</option>';
+  Object.keys(SUBURB_TRAVEL_KM).forEach(function(name) {
+    h += '<option value="' + name + '">' + name + '</option>';
+  });
+  sel.innerHTML = h;
+  if (S.client && S.client.suburb) sel.value = S.client.suburb;
+}
+
+function applySuburbTravel(suburbName) {
+  if (!S.client) return;
+  S.client.suburb = suburbName;
+  if (suburbName && SUBURB_TRAVEL_KM.hasOwnProperty(suburbName)) {
+    const km = SUBURB_TRAVEL_KM[suburbName];
+    S.custom.travelKm = km;
+    const input = document.querySelector('[data-bind="custom.travelKm"]');
+    if (input) input.value = km;
+  }
+  calcAll();
+}
+
 const PRICE = {
   epoxy: { 'Flake Internal':85, 'Flake External':110, 'Quartz Internal':95, 'Metallic Internal':140 },
   flakeUp: { 'Standard':0, 'Marble Tone':5, 'Stone Grip':5, 'Natural Stone':10, 'Classic XL':8, 'Special Blend':12 },
   conc: { 'Hard':0, 'Medium':0, 'Soft':20 },
   coat: { 'None':0, 'Single Paint':10, 'Multi-Paint':20, 'Epoxy Removal':40, 'Poxit Overlay':0 },
   addons: { nonslip:10, mvb:20, xtopcoat:15, turnup:30, silicone:18, coving:65, border:35 },
+  regrout: {
+    porcelain: { overtop:20, grindout:65 },
+    stone: { overtop:25, grindout:85 }
+  },
   fastcure: { '1':20, '2':40 },
   logo: { '150':'Over-Flake Small — $150', '250':'Over-Flake Medium — $250', '200':'Flat/Dead-Flat Small — $200', '350':'Flat/Dead-Flat Medium — $350' },
   stencil: { '25':'Easy — $25/m²', '40':'Medium — $40/m²', '60':'Hard — $60/m²', '85':'Very Hard — $85/m²' },
@@ -416,7 +532,7 @@ const PRICE = {
   grindMvb: 20, trip: 80, lip: 60,
   polished: 120,
   joint: 40, routing: 8, softcut: 12,
-  silJoint: 8, polyJoint: 18,
+  silJoint: 16, polyJoint: 18,
   crackRate: 40, crackMin: 120,
   spall: { small:35, med:55, large:90, area:110 },
   demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, cabinetry:60 },
@@ -443,7 +559,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
@@ -453,6 +569,7 @@ function freshState() {
     demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, kitchenArea:0, cabinetryLm:0 },
     pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
     custom: { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false },
+    generalAddons: { nonslip:false, nonslipM2:0, mvb:false, mvbM2:0, xtopcoat:false, xtopcoatM2:0, fastcure:false, fastcureCoats:'2', fastcureM2:0, turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' },
     overrides: {}
   };
 }
@@ -600,12 +717,50 @@ function sealSection() {
       '<div class="field"><label>Seal Tier</label>' + pills(Object.keys(PRICE.seal), z.type, 'setSZ_type', i) + '</div>' +
       '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + desc + ' · <strong>$' + rate + '/m²</strong> · min $' + min + '</div>' +
       '<div class="field"><label>Area (m²)</label><input type="number" data-bind="sealZones.' + i + '.area" step="0.5" min="0"></div>' +
+      regroutBlock(z, i) +
       '<div class="zone-total-line"><div class="zt-label">Zone Total</div><div class="zt-value" id="zt-seal-' + i + '">$0</div></div></div>';
   });
   h += '<button class="btn-add" onclick="addZone(\'seal\')">＋ Add Seal Zone</button></div></div>';
   return h;
 }
 function setSZ_type(i,v){ S.sealZones[i].type=v; renderDetails(); calcAll(); }
+function regroutBlock(z, i) {
+  const on = !!z.regrout;
+  const surf = z.regroutSurface || 'porcelain';
+  const opt = z.regroutOption || 'overtop';
+  const rate = PRICE.regrout[surf][opt];
+  let h = '<div class="toggle-row" style="margin-top:4px;"><div class="toggle-label">Regrouting</div><div class="toggle-price">from $20/m²</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (on?'checked':'') + ' onchange="S.sealZones[' + i + '].regrout=this.checked;renderDetails();calcAll()"><span class="toggle-slider"></span></label></div>';
+  if (on) {
+    h += '<div style="padding-left:8px;">' +
+      '<div class="info-box" style="font-size:10px;margin-bottom:10px;">Flat rate per m² based on standard 10mm grout joints. "Grout over the top" assumes the surface is already pressure cleaned under the base Clean &amp; Seal service (grouting labour only).</div>' +
+      '<div class="field"><label>Surface Type</label>' +
+      '<div class="radio-group">' +
+      '<div class="radio-pill ' + (surf==='porcelain'?'selected':'') + '" onclick="setRegrout(' + i + ',\'regroutSurface\',\'porcelain\')">Porcelain / Ceramic</div>' +
+      '<div class="radio-pill ' + (surf==='stone'?'selected':'') + '" onclick="setRegrout(' + i + ',\'regroutSurface\',\'stone\')">Natural Stone</div>' +
+      '</div></div>' +
+      '<div class="field"><label>Regrout Method</label>' +
+      '<div class="radio-group">' +
+      '<div class="radio-pill ' + (opt==='overtop'?'selected':'') + '" onclick="setRegrout(' + i + ',\'regroutOption\',\'overtop\')">Grout over the top ($' + PRICE.regrout[surf].overtop + '/m²)</div>' +
+      '<div class="radio-pill ' + (opt==='grindout'?'selected':'') + '" onclick="setRegrout(' + i + ',\'regroutOption\',\'grindout\')">Grind out &amp; regrout ($' + PRICE.regrout[surf].grindout + '/m²)</div>' +
+      '</div></div>' +
+      '<div class="field"><label>Regrout Area (m²) @ $' + rate + '/m²</label><input type="number" value="' + (z.regroutM2||0) + '" step="0.5" min="0" oninput="S.sealZones[' + i + '].regroutM2=parseFloat(this.value)||0;calcAll()"></div>' +
+      '</div>';
+  }
+  return h;
+}
+function setRegrout(i, key, val) { S.sealZones[i][key] = val; renderDetails(); calcAll(); }
+function regroutPrice(z) {
+  if (!z.regrout || !(z.regroutM2 > 0)) return 0;
+  const surf = z.regroutSurface || 'porcelain';
+  const opt = z.regroutOption || 'overtop';
+  return z.regroutM2 * (PRICE.regrout[surf][opt] || 0);
+}
+function regroutLabel(z) {
+  const surf = (z.regroutSurface === 'stone') ? 'Natural Stone' : 'Porcelain/Ceramic';
+  const opt = (z.regroutOption === 'grindout') ? 'grind out & regrout' : 'grout over top';
+  return 'Regrouting — ' + surf + ', ' + opt + ' (' + z.regroutM2 + 'm²)';
+}
 
 function gsSection() {
   let h = '<div class="card"><div class="card-header"><div class="card-title">🪓 Grind &amp; Seal <span class="badge" id="badge-gs">$0</span></div></div><div class="card-body">' +
@@ -699,7 +854,7 @@ function addZone(type) {
   if (type === 'epoxy') S.epoxyZones.push({ name:'', sys:'Flake Internal', flake:'Standard', conc:'Hard', coat:'None', area:0,
     addons:{ nonslip:false, mvb:false, xtopcoat:false, fastcure:false, fastcureCoats:'2', turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' } });
   if (type === 'tinted') S.tintedZones.push({ name:'', prep:'Pressure Wash', colour:'', coats:'2', area:0 });
-  if (type === 'seal') S.sealZones.push({ name:'', type:'Essential Seal', area:0 });
+  if (type === 'seal') S.sealZones.push({ name:'', type:'Essential Seal', area:0, regrout:false, regroutSurface:'porcelain', regroutOption:'overtop', regroutM2:0 });
   if (type === 'gs') S.gsZones.push({ name:'', type:'Premium Grind & Seal', area:0 });
   if (type === 'aqua') S.aquaZones.push({ name:'', area:0 });
   if (type === 'grind') S.grindZones.push({ name:'', type:'Light Surface Prep', area:0, mvb:false });
@@ -712,11 +867,10 @@ function rmZone(listName, i) { S[listName].splice(i,1); renderDetails(); renderA
 // ===== ADD-ONS TAB =====
 function renderAddons() {
   const c = document.getElementById('addonsContainer');
-  let h = pwUpsellCard();
-  if (S.epoxyZones.length === 0) {
-    h += '<div class="info-box">Epoxy zone add-ons (non-slip, MVB, turn-ups etc.) apply to <strong>epoxy floor zones</strong>. Add an epoxy zone in Details first.</div>';
-    c.innerHTML = h;
-    return;
+  let h = generalAddonsCard();
+  h += pwUpsellCard();
+  if (S.epoxyZones.length > 0) {
+    h += '<div class="info-box" style="margin-top:4px;">Per-epoxy-zone add-ons below apply to each specific epoxy floor zone. General add-ons above apply to the job as a whole.</div>';
   }
   S.epoxyZones.forEach(function(z, i) {
     const a = z.addons;
@@ -733,8 +887,8 @@ function renderAddons() {
       '<label class="toggle-switch"><input type="checkbox" ' + (a.turnup?'checked':'') + ' onchange="setA(' + i + ',\'turnup\',this.checked)"><span class="toggle-slider"></span></label></div>' +
       (a.turnup ? '<div style="padding-left:8px;">' +
         '<div class="field"><label>Turn-up Length (lm)</label><input type="number" value="' + a.turnupLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.turnupLm=parseFloat(this.value)||0;calcAll()"></div>' +
-        tgl(i,'silicone','Silicone Bead','+$18/lm',a.silicone) +
-        (a.silicone ? '<div class="field"><label>Silicone Length (lm)</label><input type="number" value="' + a.silicLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.silicLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
+        tgl(i,'silicone','Polyurethane Bead','+$18/lm',a.silicone) +
+        (a.silicone ? '<div class="field"><label>Polyurethane Length (lm)</label><input type="number" value="' + a.silicLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.silicLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
         tgl(i,'coving','Coving (Epoxy/Sand Cove)','+$65/lm',a.coving) +
         (a.coving ? '<div class="field"><label>Coving Length (lm)</label><input type="number" value="' + a.covingLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.covingLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
         '</div>' : '') +
@@ -754,6 +908,60 @@ function renderAddons() {
       '</div></div>';
   });
   c.innerHTML = h;
+}
+function gaTgl(key, label, price, checked) {
+  return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price">' + price + '</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (checked?'checked':'') + ' onchange="S.generalAddons.' + key + '=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>';
+}
+function gaNum(key, label) {
+  return '<div class="field" style="padding-left:8px;"><label>' + label + '</label><input type="number" value="' + (S.generalAddons[key]||0) + '" step="0.5" min="0" oninput="S.generalAddons.' + key + '=parseFloat(this.value)||0;calcAll()"></div>';
+}
+function generalAddonsCard() {
+  const g = S.generalAddons;
+  let h = '<div class="card"><div class="card-header"><div class="card-title">➕ General Add-Ons <span class="badge" id="badge-generalAddons">$0</span></div></div><div class="card-body">' +
+    '<div class="info-box" style="font-size:11px;">Add-ons available on any job, with or without an epoxy zone. Charged per m² or per lm as shown. Note: some items (MVB, extra topcoat, non-slip aggregate) are only physically applicable to an epoxy floor — use judgement.</div>' +
+    gaTgl('nonslip','Non-slip Aggregate','+$10/m²',g.nonslip) + (g.nonslip ? gaNum('nonslipM2','Non-slip Area (m²)') : '') +
+    gaTgl('mvb','Moisture Vapour Barrier (MVB)','+$20/m²',g.mvb) + (g.mvb ? gaNum('mvbM2','MVB Area (m²)') : '') +
+    gaTgl('xtopcoat','Extra Topcoat (Smoothness)','+$15/m²',g.xtopcoat) + (g.xtopcoat ? gaNum('xtopcoatM2','Extra Topcoat Area (m²)') : '') +
+    '<div class="toggle-row"><div class="toggle-label">Fast-Cure Polyaspartic Topcoat</div><div class="toggle-price">$20–40/m²</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (g.fastcure?'checked':'') + ' onchange="S.generalAddons.fastcure=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (g.fastcure ? '<div class="field" style="padding-left:8px;"><label>Coats</label><select onchange="S.generalAddons.fastcureCoats=this.value;calcAll()">' +
+      '<option value="1" ' + (g.fastcureCoats==='1'?'selected':'') + '>1 Coat — $20/m²</option>' +
+      '<option value="2" ' + (g.fastcureCoats==='2'?'selected':'') + '>2 Coats — $40/m² (recommended)</option></select></div>' +
+      gaNum('fastcureM2','Fast-Cure Area (m²)') : '') +
+    gaTgl('turnup','Turn-ups 100mm Wall','+$30/lm',g.turnup) + (g.turnup ? gaNum('turnupLm','Turn-up Length (lm)') : '') +
+    gaTgl('silicone','Polyurethane Bead','+$18/lm',g.silicone) + (g.silicone ? gaNum('silicLm','Polyurethane Length (lm)') : '') +
+    gaTgl('coving','Coving (Epoxy/Sand Cove)','+$65/lm',g.coving) + (g.coving ? gaNum('covingLm','Coving Length (lm)') : '') +
+    gaTgl('border','Decorative Border/Banding','+$35/lm',g.border) + (g.border ? gaNum('borderLm','Border Length (lm)') : '') +
+    '<div class="toggle-row"><div class="toggle-label">Vinyl Logo</div><div class="toggle-price">from $150</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (g.logo?'checked':'') + ' onchange="S.generalAddons.logo=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (g.logo ? '<div class="field" style="padding-left:8px;"><label>Logo Type</label><select onchange="S.generalAddons.logoType=this.value;calcAll()">' +
+      Object.keys(PRICE.logo).map(function(v){ return '<option value="' + v + '" ' + (g.logoType===v?'selected':'') + '>' + PRICE.logo[v] + '</option>'; }).join('') + '</select></div>' : '') +
+    '<div class="toggle-row"><div class="toggle-label">Stencil</div><div class="toggle-price">from $25/m²</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (g.stencil?'checked':'') + ' onchange="S.generalAddons.stencil=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (g.stencil ? '<div class="row" style="padding-left:8px;">' +
+      '<div class="field"><label>Stencil Area (m²)</label><input type="number" value="' + (g.stencilM2||0) + '" step="0.5" min="0" oninput="S.generalAddons.stencilM2=parseFloat(this.value)||0;calcAll()"></div>' +
+      '<div class="field"><label>Difficulty</label><select onchange="S.generalAddons.stencilDiff=this.value;calcAll()">' +
+      Object.keys(PRICE.stencil).map(function(v){ return '<option value="' + v + '" ' + (g.stencilDiff===v?'selected':'') + '>' + PRICE.stencil[v] + '</option>'; }).join('') + '</select></div></div>' : '') +
+    '</div></div>';
+  return h;
+}
+function generalAddonsList() {
+  const g = S.generalAddons; const list = [];
+  if (g.nonslip && g.nonslipM2 > 0) list.push({ label:'Non-slip Aggregate (' + g.nonslipM2 + 'm²)', price: g.nonslipM2*PRICE.addons.nonslip });
+  if (g.mvb && g.mvbM2 > 0) list.push({ label:'Moisture Vapour Barrier (' + g.mvbM2 + 'm²)', price: g.mvbM2*PRICE.addons.mvb });
+  if (g.xtopcoat && g.xtopcoatM2 > 0) list.push({ label:'Extra Topcoat (' + g.xtopcoatM2 + 'm²)', price: g.xtopcoatM2*PRICE.addons.xtopcoat });
+  if (g.fastcure && g.fastcureM2 > 0) list.push({ label:'Fast-Cure Polyaspartic (' + g.fastcureCoats + ' Coat' + (g.fastcureCoats==='2'?'s':'') + ', ' + g.fastcureM2 + 'm²)', price: g.fastcureM2*(PRICE.fastcure[g.fastcureCoats]||40) });
+  if (g.turnup && g.turnupLm > 0) list.push({ label:'Turn-ups 100mm (' + g.turnupLm + 'lm)', price: g.turnupLm*PRICE.addons.turnup });
+  if (g.silicone && g.silicLm > 0) list.push({ label:'Polyurethane Bead (' + g.silicLm + 'lm)', price: g.silicLm*PRICE.addons.silicone });
+  if (g.coving && g.covingLm > 0) list.push({ label:'Coving (' + g.covingLm + 'lm)', price: g.covingLm*PRICE.addons.coving });
+  if (g.border && g.borderLm > 0) list.push({ label:'Border/Banding (' + g.borderLm + 'lm)', price: g.borderLm*PRICE.addons.border });
+  if (g.logo) list.push({ label:'Vinyl Logo — ' + (PRICE.logo[g.logoType]||'').split('—')[0].trim(), price: parseFloat(g.logoType)||0 });
+  if (g.stencil && g.stencilM2 > 0) list.push({ label:'Stencil (' + g.stencilM2 + 'm²)', price: g.stencilM2*(parseFloat(g.stencilDiff)||25) });
+  return list;
+}
+function generalAddonsTotal() {
+  return generalAddonsList().reduce(function(s,x){ return s + x.price; }, 0);
 }
 function pwUpsellCard() {
   const p = S.pwUpsell;
@@ -821,7 +1029,7 @@ function renderSilJoints() {
     return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
       '<div class="field"><label>Description</label><input type="text" value="' + s.name + '" placeholder="e.g. Perimeter joints" oninput="S.siliconeJoints[' + i + '].name=this.value"></div>' +
       '<button class="btn-remove" onclick="rmSilJoint(' + i + ')">✕</button></div>' +
-      '<div class="field"><label>Length (lm) @ $8/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.siliconeJoints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
+      '<div class="field"><label>Length (lm) @ $16/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.siliconeJoints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
   }).join('');
 }
 function addPolyJoint() { S.polyJoints.push({ name:'', lm:0 }); renderPolyJoints(); calcAll(); }
@@ -1048,7 +1256,7 @@ function epoxyAddonsList(z) {
   if (a.xtopcoat) list.push({ label:'Extra Topcoat (Smoothness)', price: area*PRICE.addons.xtopcoat });
   if (a.fastcure) list.push({ label:'Fast-Cure Polyaspartic (' + a.fastcureCoats + ' Coat' + (a.fastcureCoats==='2'?'s':'') + ')', price: area*(PRICE.fastcure[a.fastcureCoats]||40) });
   if (a.turnup && a.turnupLm > 0) list.push({ label:'Turn-ups 100mm (' + a.turnupLm + 'lm)', price: a.turnupLm*PRICE.addons.turnup });
-  if (a.turnup && a.silicone && a.silicLm > 0) list.push({ label:'Silicone Bead (' + a.silicLm + 'lm)', price: a.silicLm*PRICE.addons.silicone });
+  if (a.turnup && a.silicone && a.silicLm > 0) list.push({ label:'Polyurethane Bead (' + a.silicLm + 'lm)', price: a.silicLm*PRICE.addons.silicone });
   if (a.turnup && a.coving && a.covingLm > 0) list.push({ label:'Coving (' + a.covingLm + 'lm)', price: a.covingLm*PRICE.addons.coving });
   if (a.border && a.borderLm > 0) list.push({ label:'Border/Banding (' + a.borderLm + 'lm)', price: a.borderLm*PRICE.addons.border });
   if (a.logo) list.push({ label:'Vinyl Logo — ' + (PRICE.logo[a.logoType]||'').split('—')[0].trim(), price: parseFloat(a.logoType)||0 });
@@ -1076,7 +1284,10 @@ function buildSections() {
     var rate = PRICE.seal[z.type] || 20;
     var min = PRICE.sealMin[z.type] || 0;
     var sub = Math.max(z.area*rate, min);
-    sections.push({ key:'seal-'+i, category:'💧 Cleaning &amp; Sealing', zoneName:z.name||('Zone '+(i+1)), desc:z.type + ' · ' + z.area + 'm²' + (z.area*rate < min ? ' (min charge $' + min + ')' : ''), addons:[], subtotal:sub });
+    var rg = regroutPrice(z);
+    var addons = [];
+    if (rg > 0) addons.push({ label:regroutLabel(z), price:rg });
+    sections.push({ key:'seal-'+i, category:'💧 Cleaning &amp; Sealing', zoneName:z.name||('Zone '+(i+1)), desc:z.type + ' · ' + z.area + 'm²' + (z.area*rate < min ? ' (min charge $' + min + ')' : ''), addons:addons, subtotal:sub + rg });
   });
   S.gsZones.forEach(function(z,i) {
     if (!z.area) return;
@@ -1154,7 +1365,7 @@ function buildSections() {
     if (!j.lm) return;
     const p = j.lm * PRICE.silJoint;
     silSub += p;
-    silAdd.push({ label:(j.name||'Silicone Joint '+(i+1)) + ' — ' + j.lm + 'lm @ $8/lm', price:p });
+    silAdd.push({ label:(j.name||'Silicone Joint '+(i+1)) + ' — ' + j.lm + 'lm @ $16/lm', price:p });
   });
   if (silSub > 0) sections.push({ key:'silJoints', category:'📐 Silicone Joint Filling', zoneName:'', desc:'', addons:silAdd, subtotal:silSub });
   let polySub = 0; const polyAdd = [];
@@ -1201,6 +1412,11 @@ function buildSections() {
   }
   if (d.cabinetryLm > 0) { const p = d.cabinetryLm*PRICE.demo.cabinetry; dSub += p; dAdd.push({label:'Overhead/Upper Cabinetry — ' + d.cabinetryLm + 'lm', price:p}); }
   if (dSub > 0) sections.push({ key:'demo', category:'🔨 Demolition & Strip-Out', zoneName:'', desc:'', addons:dAdd, subtotal:dSub });
+  const gaList = generalAddonsList();
+  if (gaList.length > 0) {
+    const gaSub = gaList.reduce(function(s,x){ return s + x.price; }, 0);
+    sections.push({ key:'generalAddons', category:'➕ Add-Ons', zoneName:'', desc:'', addons:gaList, subtotal:gaSub });
+  }
   if (S.pwUpsell.enabled) {
     const p = S.pwUpsell;
     let pwSub = PRICE.pwUpsell[p.beds] || 0;
@@ -1243,7 +1459,7 @@ function calcAll() {
 
   S.epoxyZones.forEach(function(z,i){ const el = document.getElementById('zt-epoxy-'+i); if (el) el.textContent = '$' + Math.round(epoxyZoneTotal(z)).toLocaleString(); });
   S.tintedZones.forEach(function(z,i){ const el = document.getElementById('zt-tinted-'+i); if (el) { const r = PRICE.tintedPrep[z.prep]||30; const e = z.coats==='3'?z.area*10:0; el.textContent = '$' + Math.round((z.area||0)*r+e).toLocaleString(); } });
-  S.sealZones.forEach(function(z,i){ const el = document.getElementById('zt-seal-'+i); if (el) { var r=PRICE.seal[z.type]||20, m=PRICE.sealMin[z.type]||0; el.textContent = '$' + Math.round(Math.max((z.area||0)*r, (z.area>0?m:0))).toLocaleString(); } });
+  S.sealZones.forEach(function(z,i){ const el = document.getElementById('zt-seal-'+i); if (el) { var r=PRICE.seal[z.type]||20, m=PRICE.sealMin[z.type]||0; el.textContent = '$' + Math.round(Math.max((z.area||0)*r, (z.area>0?m:0)) + regroutPrice(z)).toLocaleString(); } });
   S.gsZones.forEach(function(z,i){ const el = document.getElementById('zt-gs-'+i); if (el) { var r=PRICE.gs[z.type]||75, m=PRICE.gsMin[z.type]||0; el.textContent = '$' + Math.round(Math.max((z.area||0)*r, (z.area>0?m:0))).toLocaleString(); } });
   S.aquaZones.forEach(function(z,i){ const el = document.getElementById('zt-aqua-'+i); if (el) el.textContent = '$' + Math.round((z.area||0)*PRICE.aqua).toLocaleString(); });
   S.grindZones.forEach(function(z,i){ const el = document.getElementById('zt-grind-'+i); if (el) { let t = (z.area||0)*(PRICE.grindType[z.type]||40); if (z.mvb) t += (z.area||0)*PRICE.grindMvb; el.textContent = '$' + Math.round(t).toLocaleString(); } });
@@ -1271,6 +1487,7 @@ function calcAll() {
   badge('badge-coreDrill', sumKeys('coreDrill'));
   badge('badge-ramping', sumKeys('ramping'));
   badge('badge-pwUpsell', sumKeys('pwUpsell'));
+  badge('badge-generalAddons', generalAddonsTotal());
   (function() {
     badge('badge-demoSurface', (S.demo.carpet*PRICE.demo.carpet)+(S.demo.laminate*PRICE.demo.laminate)+(S.demo.vinyl*PRICE.demo.vinyl)+(S.demo.tile*PRICE.demo.tile)+(S.demo.tileMosaic*PRICE.demo.tileMosaic));
     const bracket = PRICE.kitchenStrip.find(function(b){ return S.demo.kitchenArea <= b.max; });
@@ -1638,8 +1855,12 @@ function restoreQuote(payload) {
     if (!S.overrides) S.overrides = {};
     if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false };
     if (S.custom.travelKm === undefined) S.custom.travelKm = 0;
+    if (!S.client) S.client = freshState().client;
+    if (S.client.suburb === undefined) S.client.suburb = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
     if (!S.coreHoles) S.coreHoles = [];
+    if (!S.generalAddons) S.generalAddons = freshState().generalAddons;
+    S.sealZones.forEach(function(z){ if (z.regrout === undefined) { z.regrout=false; z.regroutSurface='porcelain'; z.regroutOption='overtop'; z.regroutM2=0; } });
     measureShapes = payload.measureShapes || [];
   } else if (payload.client) {
     const old = payload;
@@ -1700,6 +1921,7 @@ function renderEverything() {
   renderCustomItems();
   renderMeasure();
   syncBoundInputs();
+  populateSuburbDropdown();
   const cpT = document.getElementById('carePromoToggle');
   if (cpT) cpT.checked = !!S.custom.carePromo;
   calcAll();
