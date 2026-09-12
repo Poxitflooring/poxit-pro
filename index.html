@@ -155,7 +155,6 @@
     <div class="field"><label>Phone</label><input type="text" data-bind="client.phone" placeholder="04xx xxx xxx"></div>
     <div class="field"><label>Email</label><input type="text" data-bind="client.email" placeholder="john@email.com"></div>
     <div class="field"><label>Site Address</label><input type="text" data-bind="client.address" placeholder="123 Example St, Gold Coast"></div>
-    <div class="field"><label>Suburb (for travel estimate)</label><select id="clientSuburbSelect" onchange="applySuburbTravel(this.value)"></select></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
     <div class="field"><label>Quote Reference #</label><input type="text" data-bind="client.ref" placeholder="Assigned automatically when you hit Save"></div>
@@ -249,7 +248,7 @@
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">Silicone Joint Filling <span class="badge" id="badge-silJoints">$0</span></div></div>
   <div class="card-body">
-    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ PROVISIONAL — $16/lm, confirming with supplier before this goes live on a quote.</div>
+    <div class="info-box" style="font-size:11px;color:var(--gold);">⚠ PROVISIONAL — $8/lm, confirming with supplier before this goes live on a quote.</div>
     <div id="silJointList"></div>
     <button class="btn-add" onclick="addSilJoint()">＋ Add Silicone Joint</button>
   </div></div>
@@ -335,7 +334,7 @@
 
   <div class="card"><div class="card-header"><div class="card-title">Travel</div></div>
   <div class="card-body">
-    <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Select the client's suburb on the Client tab to auto-fill an estimate, or enter billable km beyond 25km manually — charged at $1.75/km.</div>
+    <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Enter billable km beyond that — charged at $1.75/km.</div>
     <div class="field"><label>Billable Travel (km) @ $1.75/km</label><input type="number" data-bind="custom.travelKm" min="0" step="1" value="0"></div>
   </div></div>
 
@@ -396,117 +395,6 @@
   </div>
 </div>
 <script>
-const SUBURB_TRAVEL_KM = {
-    "Pimpama QLD": 0,
-    "Coomera QLD": 0,
-    "Upper Coomera QLD": 0,
-    "Willow Vale QLD": 0,
-    "Coombabah QLD": 0,
-    "Runaway Bay QLD": 0,
-    "Paradise Point QLD": 0,
-    "Biggera Waters QLD": 0,
-    "Helensvale QLD": 0,
-    "Hope Island QLD": 0,
-    "Ormeau QLD": 0,
-    "Norwell QLD": 0,
-    "Ormeau Hills QLD": 0,
-    "Wongawallan QLD": 0,
-    "Oxenford QLD": 0,
-    "Labrador QLD": 0,
-    "Southport QLD": 0,
-    "Ashmore QLD": 0,
-    "Arundel QLD": 0,
-    "Molendinar QLD": 0,
-    "Beenleigh QLD": 0,
-    "Eagleby QLD": 0,
-    "Yatala QLD": 0,
-    "Main Beach QLD": 3,
-    "Surfers Paradise QLD": 3,
-    "Benowa QLD": 3,
-    "Bundall QLD": 3,
-    "Redland Bay QLD": 5,
-    "Victoria Point QLD": 5,
-    "Loganholme QLD": 6,
-    "Tamborine Mountain QLD": 6,
-    "Broadbeach QLD": 7,
-    "Broadbeach Waters QLD": 7,
-    "Mermaid Beach QLD": 7,
-    "Mermaid Waters QLD": 7,
-    "Robina QLD": 11,
-    "Merrimac QLD": 11,
-    "Clear Island Waters QLD": 11,
-    "Nerang QLD": 12,
-    "Carrara QLD": 12,
-    "Advancetown QLD": 12,
-    "Highland Park QLD": 12,
-    "Gilston QLD": 12,
-    "Beechmont QLD": 12,
-    "Springwood QLD": 14,
-    "Miami QLD": 14,
-    "Burleigh Heads QLD": 14,
-    "Burleigh Waters QLD": 14,
-    "Logan Central QLD": 16,
-    "Cleveland QLD": 16,
-    "Varsity Lakes QLD": 16,
-    "Reedy Creek QLD": 16,
-    "Jimboomba QLD": 17,
-    "Worongary QLD": 18,
-    "Mudgeeraba QLD": 18,
-    "Springbrook QLD": 18,
-    "Austinville QLD": 18,
-    "Rochedale QLD": 21,
-    "Elanora QLD": 21,
-    "Palm Beach QLD": 21,
-    "Sunnybank QLD": 23,
-    "Mount Gravatt QLD": 23,
-    "Browns Plains QLD": 23,
-    "Tallebudgera QLD": 23,
-    "Tallebudgera Valley QLD": 23,
-    "Currumbin QLD": 24,
-    "Currumbin Waters QLD": 24,
-    "Tugun QLD": 24,
-    "Bilinga QLD": 24,
-    "Kirra QLD": 24,
-    "Coolangatta QLD": 24,
-    "Canungra QLD": 24,
-    "Tweed Heads NSW": 26,
-    "Tweed Heads West NSW": 26,
-    "Tweed Heads South NSW": 28,
-    "Banora Point NSW": 28,
-    "Bilambil Heights NSW": 28,
-    "Terranora NSW": 28,
-    "Brisbane QLD": 35,
-    "Kingscliff NSW": 38,
-    "Casuarina NSW": 38,
-    "Cabarita Beach NSW": 46,
-    "Murwillumbah NSW": 49,
-    "Pottsville NSW": 52
-};
-
-function populateSuburbDropdown() {
-  const sel = document.getElementById('clientSuburbSelect');
-  if (!sel) return;
-  if (sel.options.length > 0) return;
-  let h = '<option value="">Select suburb (optional)</option>';
-  Object.keys(SUBURB_TRAVEL_KM).forEach(function(name) {
-    h += '<option value="' + name + '">' + name + '</option>';
-  });
-  sel.innerHTML = h;
-  if (S.client && S.client.suburb) sel.value = S.client.suburb;
-}
-
-function applySuburbTravel(suburbName) {
-  if (!S.client) return;
-  S.client.suburb = suburbName;
-  if (suburbName && SUBURB_TRAVEL_KM.hasOwnProperty(suburbName)) {
-    const km = SUBURB_TRAVEL_KM[suburbName];
-    S.custom.travelKm = km;
-    const input = document.querySelector('[data-bind="custom.travelKm"]');
-    if (input) input.value = km;
-  }
-  calcAll();
-}
-
 const PRICE = {
   epoxy: { 'Flake Internal':85, 'Flake External':110, 'Quartz Internal':95, 'Metallic Internal':140 },
   flakeUp: { 'Standard':0, 'Marble Tone':5, 'Stone Grip':5, 'Natural Stone':10, 'Classic XL':8, 'Special Blend':12 },
@@ -532,13 +420,20 @@ const PRICE = {
   grindMvb: 20, trip: 80, lip: 60,
   polished: 120,
   joint: 40, routing: 8, softcut: 12,
-  silJoint: 16, polyJoint: 18,
+  silJoint: 8, polyJoint: 18,
   crackRate: 40, crackMin: 120,
   spall: { small:35, med:55, large:90, area:110 },
   demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, cabinetry:60 },
   kitchenStrip: [ {max:6, price:1200}, {max:10, price:2800}, {max:Infinity, price:4800} ],
-  pwUpsell: { '2':180, '3':230, '4':280, '5':340 },
-  pwUpsellMods: { doubleStorey:90, diffAccess:40 },
+  pwUpsell: {
+    single: { '2':400, '3':480, '4':560, '5':650 },
+    double: { '2':480, '3':570, '4':700, '5':820 }
+  },
+  pwUpsellMods: { diffAccess:120 },
+  roofWash: {
+    single: { '2':700, '3':850, '4':1000, '5':1200 },
+    double: { '2':850, '3':1000, '4':1150, '5':1350 }
+  },
   rampMortarBucketKg: 10, rampMortarBucketCost: 48.74, rampCoverage: 1.4,
   rampEpoxyBatchKg: 22.2, rampEpoxyBatchCost: 55, rampEpoxyCoverage: 1.8, rampEpoxyMultiplier: 2.2,
   coreDrill: { '25mm (Weep Hole)': 220, 'Up to 75mm': 250, 'Up to 102mm': 300, 'Up to 152mm': 380 },
@@ -559,7 +454,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
@@ -568,6 +463,7 @@ function freshState() {
     ramps: [],
     demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, kitchenArea:0, cabinetryLm:0 },
     pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
+    roofWash: { enabled:false, beds:'3', doubleStorey:false },
     custom: { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false },
     generalAddons: { nonslip:false, nonslipM2:0, mvb:false, mvbM2:0, xtopcoat:false, xtopcoatM2:0, fastcure:false, fastcureCoats:'2', fastcureM2:0, turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' },
     overrides: {}
@@ -869,6 +765,7 @@ function renderAddons() {
   const c = document.getElementById('addonsContainer');
   let h = generalAddonsCard();
   h += pwUpsellCard();
+  h += roofWashCard();
   if (S.epoxyZones.length > 0) {
     h += '<div class="info-box" style="margin-top:4px;">Per-epoxy-zone add-ons below apply to each specific epoxy floor zone. General add-ons above apply to the job as a whole.</div>';
   }
@@ -887,8 +784,8 @@ function renderAddons() {
       '<label class="toggle-switch"><input type="checkbox" ' + (a.turnup?'checked':'') + ' onchange="setA(' + i + ',\'turnup\',this.checked)"><span class="toggle-slider"></span></label></div>' +
       (a.turnup ? '<div style="padding-left:8px;">' +
         '<div class="field"><label>Turn-up Length (lm)</label><input type="number" value="' + a.turnupLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.turnupLm=parseFloat(this.value)||0;calcAll()"></div>' +
-        tgl(i,'silicone','Polyurethane Bead','+$18/lm',a.silicone) +
-        (a.silicone ? '<div class="field"><label>Polyurethane Length (lm)</label><input type="number" value="' + a.silicLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.silicLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
+        tgl(i,'silicone','Silicone Bead','+$18/lm',a.silicone) +
+        (a.silicone ? '<div class="field"><label>Silicone Length (lm)</label><input type="number" value="' + a.silicLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.silicLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
         tgl(i,'coving','Coving (Epoxy/Sand Cove)','+$65/lm',a.coving) +
         (a.coving ? '<div class="field"><label>Coving Length (lm)</label><input type="number" value="' + a.covingLm + '" step="0.5" min="0" oninput="S.epoxyZones[' + i + '].addons.covingLm=parseFloat(this.value)||0;calcAll()"></div>' : '') +
         '</div>' : '') +
@@ -930,7 +827,7 @@ function generalAddonsCard() {
       '<option value="2" ' + (g.fastcureCoats==='2'?'selected':'') + '>2 Coats — $40/m² (recommended)</option></select></div>' +
       gaNum('fastcureM2','Fast-Cure Area (m²)') : '') +
     gaTgl('turnup','Turn-ups 100mm Wall','+$30/lm',g.turnup) + (g.turnup ? gaNum('turnupLm','Turn-up Length (lm)') : '') +
-    gaTgl('silicone','Polyurethane Bead','+$18/lm',g.silicone) + (g.silicone ? gaNum('silicLm','Polyurethane Length (lm)') : '') +
+    gaTgl('silicone','Silicone Bead','+$18/lm',g.silicone) + (g.silicone ? gaNum('silicLm','Silicone Length (lm)') : '') +
     gaTgl('coving','Coving (Epoxy/Sand Cove)','+$65/lm',g.coving) + (g.coving ? gaNum('covingLm','Coving Length (lm)') : '') +
     gaTgl('border','Decorative Border/Banding','+$35/lm',g.border) + (g.border ? gaNum('borderLm','Border Length (lm)') : '') +
     '<div class="toggle-row"><div class="toggle-label">Vinyl Logo</div><div class="toggle-price">from $150</div>' +
@@ -953,7 +850,7 @@ function generalAddonsList() {
   if (g.xtopcoat && g.xtopcoatM2 > 0) list.push({ label:'Extra Topcoat (' + g.xtopcoatM2 + 'm²)', price: g.xtopcoatM2*PRICE.addons.xtopcoat });
   if (g.fastcure && g.fastcureM2 > 0) list.push({ label:'Fast-Cure Polyaspartic (' + g.fastcureCoats + ' Coat' + (g.fastcureCoats==='2'?'s':'') + ', ' + g.fastcureM2 + 'm²)', price: g.fastcureM2*(PRICE.fastcure[g.fastcureCoats]||40) });
   if (g.turnup && g.turnupLm > 0) list.push({ label:'Turn-ups 100mm (' + g.turnupLm + 'lm)', price: g.turnupLm*PRICE.addons.turnup });
-  if (g.silicone && g.silicLm > 0) list.push({ label:'Polyurethane Bead (' + g.silicLm + 'lm)', price: g.silicLm*PRICE.addons.silicone });
+  if (g.silicone && g.silicLm > 0) list.push({ label:'Silicone Bead (' + g.silicLm + 'lm)', price: g.silicLm*PRICE.addons.silicone });
   if (g.coving && g.covingLm > 0) list.push({ label:'Coving (' + g.covingLm + 'lm)', price: g.covingLm*PRICE.addons.coving });
   if (g.border && g.borderLm > 0) list.push({ label:'Border/Banding (' + g.borderLm + 'lm)', price: g.borderLm*PRICE.addons.border });
   if (g.logo) list.push({ label:'Vinyl Logo — ' + (PRICE.logo[g.logoType]||'').split('—')[0].trim(), price: parseFloat(g.logoType)||0 });
@@ -965,24 +862,48 @@ function generalAddonsTotal() {
 }
 function pwUpsellCard() {
   const p = S.pwUpsell;
+  const tierKey = p.doubleStorey ? 'double' : 'single';
+  const tierLabel = p.doubleStorey ? 'Double storey' : 'Single storey';
+  const t = PRICE.pwUpsell[tierKey];
   return '<div class="card"><div class="card-header"><div class="card-title">🧼 Pressure Cleaning Upsell <span class="badge" id="badge-pwUpsell">$0</span></div></div>' +
     '<div class="card-body">' +
     '<div class="info-box" style="font-size:11px;">Full external house wash offered after the site clean, while equipment is already mobilised.</div>' +
     '<div class="toggle-row"><div class="toggle-label">Offer Pressure Cleaning Upsell</div>' +
     '<label class="toggle-switch"><input type="checkbox" ' + (p.enabled?'checked':'') + ' onchange="S.pwUpsell.enabled=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
-    (p.enabled ? '<div class="field"><label>Bedrooms</label><div class="radio-group">' +
+    (p.enabled ? '<div class="toggle-row"><div class="toggle-label">Double Storey</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (p.doubleStorey?'checked':'') + ' onchange="setPwMod(\'doubleStorey\',this.checked)"><span class="toggle-slider"></span></label></div>' +
+      '<div class="field"><label>Bedrooms</label><div class="radio-group">' +
       ['2','3','4','5'].map(function(v){ return '<div class="radio-pill ' + (v===p.beds?'selected':'') + '" onclick="setPwBeds(0,\'' + v + '\')">' + (v==='5'?'5+':v) + ' bed</div>'; }).join('') +
       '</div></div>' +
-      '<div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">2 bed $180 · 3 bed $230 · 4 bed $280 · 5+ bed $340</div>' +
-      '<div class="toggle-row"><div class="toggle-label">Double Storey</div><div class="toggle-price">+$90</div>' +
-      '<label class="toggle-switch"><input type="checkbox" ' + (p.doubleStorey?'checked':'') + ' onchange="setPwMod(\'doubleStorey\',this.checked)"><span class="toggle-slider"></span></label></div>' +
-      '<div class="toggle-row"><div class="toggle-label">Difficult Access</div><div class="toggle-price">+$40</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">' + tierLabel + ' — 2 bed $' + t['2'] + ' · 3 bed $' + t['3'] + ' · 4 bed $' + t['4'] + ' · 5+ bed $' + t['5'] + '</div>' +
+      '<div class="toggle-row"><div class="toggle-label">Difficult Access</div><div class="toggle-price">+$' + PRICE.pwUpsellMods.diffAccess + '</div>' +
       '<label class="toggle-switch"><input type="checkbox" ' + (p.diffAccess?'checked':'') + ' onchange="setPwMod(\'diffAccess\',this.checked)"><span class="toggle-slider"></span></label></div>'
       : '') +
     '</div></div>';
 }
 function setPwBeds(idx, val) { S.pwUpsell.beds = val; renderAddons(); calcAll(); }
 function setPwMod(key, val) { S.pwUpsell[key] = val; renderAddons(); calcAll(); }
+function roofWashCard() {
+  const p = S.roofWash;
+  const tierKey = p.doubleStorey ? 'double' : 'single';
+  const tierLabel = p.doubleStorey ? 'Double storey' : 'Single storey';
+  const t = PRICE.roofWash[tierKey];
+  return '<div class="card"><div class="card-header"><div class="card-title">🏠 Roof Cleaning Upsell <span class="badge" id="badge-roofWash">$0</span></div></div>' +
+    '<div class="card-body">' +
+    '<div class="info-box" style="font-size:11px;">Optional soft wash roof clean offered on site alongside the house wash.</div>' +
+    '<div class="toggle-row"><div class="toggle-label">Offer Roof Cleaning Upsell</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (p.enabled?'checked':'') + ' onchange="S.roofWash.enabled=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (p.enabled ? '<div class="toggle-row"><div class="toggle-label">Double Storey</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (p.doubleStorey?'checked':'') + ' onchange="setRoofMod(\'doubleStorey\',this.checked)"><span class="toggle-slider"></span></label></div>' +
+      '<div class="field"><label>Bedrooms</label><div class="radio-group">' +
+      ['2','3','4','5'].map(function(v){ return '<div class="radio-pill ' + (v===p.beds?'selected':'') + '" onclick="setRoofBeds(0,\'' + v + '\')">' + (v==='5'?'5+':v) + ' bed</div>'; }).join('') +
+      '</div></div>' +
+      '<div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">' + tierLabel + ' — 2 bed $' + t['2'] + ' · 3 bed $' + t['3'] + ' · 4 bed $' + t['4'] + ' · 5+ bed $' + t['5'] + '</div>'
+      : '') +
+    '</div></div>';
+}
+function setRoofBeds(idx, val) { S.roofWash.beds = val; renderAddons(); calcAll(); }
+function setRoofMod(key, val) { S.roofWash[key] = val; renderAddons(); calcAll(); }
 function tgl(i, key, label, price, checked) {
   return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price">' + price + '</div>' +
     '<label class="toggle-switch"><input type="checkbox" ' + (checked?'checked':'') + ' onchange="setA(' + i + ',\'' + key + '\',this.checked)"><span class="toggle-slider"></span></label></div>';
@@ -1029,7 +950,7 @@ function renderSilJoints() {
     return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
       '<div class="field"><label>Description</label><input type="text" value="' + s.name + '" placeholder="e.g. Perimeter joints" oninput="S.siliconeJoints[' + i + '].name=this.value"></div>' +
       '<button class="btn-remove" onclick="rmSilJoint(' + i + ')">✕</button></div>' +
-      '<div class="field"><label>Length (lm) @ $16/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.siliconeJoints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
+      '<div class="field"><label>Length (lm) @ $8/lm</label><input type="number" value="' + s.lm + '" step="0.5" min="0" oninput="S.siliconeJoints[' + i + '].lm=parseFloat(this.value)||0;calcAll()"></div><hr class="divider"></div>';
   }).join('');
 }
 function addPolyJoint() { S.polyJoints.push({ name:'', lm:0 }); renderPolyJoints(); calcAll(); }
@@ -1256,7 +1177,7 @@ function epoxyAddonsList(z) {
   if (a.xtopcoat) list.push({ label:'Extra Topcoat (Smoothness)', price: area*PRICE.addons.xtopcoat });
   if (a.fastcure) list.push({ label:'Fast-Cure Polyaspartic (' + a.fastcureCoats + ' Coat' + (a.fastcureCoats==='2'?'s':'') + ')', price: area*(PRICE.fastcure[a.fastcureCoats]||40) });
   if (a.turnup && a.turnupLm > 0) list.push({ label:'Turn-ups 100mm (' + a.turnupLm + 'lm)', price: a.turnupLm*PRICE.addons.turnup });
-  if (a.turnup && a.silicone && a.silicLm > 0) list.push({ label:'Polyurethane Bead (' + a.silicLm + 'lm)', price: a.silicLm*PRICE.addons.silicone });
+  if (a.turnup && a.silicone && a.silicLm > 0) list.push({ label:'Silicone Bead (' + a.silicLm + 'lm)', price: a.silicLm*PRICE.addons.silicone });
   if (a.turnup && a.coving && a.covingLm > 0) list.push({ label:'Coving (' + a.covingLm + 'lm)', price: a.covingLm*PRICE.addons.coving });
   if (a.border && a.borderLm > 0) list.push({ label:'Border/Banding (' + a.borderLm + 'lm)', price: a.borderLm*PRICE.addons.border });
   if (a.logo) list.push({ label:'Vinyl Logo — ' + (PRICE.logo[a.logoType]||'').split('—')[0].trim(), price: parseFloat(a.logoType)||0 });
@@ -1365,7 +1286,7 @@ function buildSections() {
     if (!j.lm) return;
     const p = j.lm * PRICE.silJoint;
     silSub += p;
-    silAdd.push({ label:(j.name||'Silicone Joint '+(i+1)) + ' — ' + j.lm + 'lm @ $16/lm', price:p });
+    silAdd.push({ label:(j.name||'Silicone Joint '+(i+1)) + ' — ' + j.lm + 'lm @ $8/lm', price:p });
   });
   if (silSub > 0) sections.push({ key:'silJoints', category:'📐 Silicone Joint Filling', zoneName:'', desc:'', addons:silAdd, subtotal:silSub });
   let polySub = 0; const polyAdd = [];
@@ -1419,11 +1340,20 @@ function buildSections() {
   }
   if (S.pwUpsell.enabled) {
     const p = S.pwUpsell;
-    let pwSub = PRICE.pwUpsell[p.beds] || 0;
-    const pwAdd = [{ label:(p.beds==='5'?'5+':p.beds) + ' Bedroom Wash', price:PRICE.pwUpsell[p.beds]||0 }];
-    if (p.doubleStorey) { pwSub += PRICE.pwUpsellMods.doubleStorey; pwAdd.push({label:'Double Storey', price:PRICE.pwUpsellMods.doubleStorey}); }
+    const pwTierKey = p.doubleStorey ? 'double' : 'single';
+    const pwTierLabel = p.doubleStorey ? 'Double Storey' : 'Single Storey';
+    let pwSub = PRICE.pwUpsell[pwTierKey][p.beds] || 0;
+    const pwAdd = [{ label:pwTierLabel + ' ' + (p.beds==='5'?'5+':p.beds) + ' Bedroom Wash', price:pwSub }];
     if (p.diffAccess) { pwSub += PRICE.pwUpsellMods.diffAccess; pwAdd.push({label:'Difficult Access', price:PRICE.pwUpsellMods.diffAccess}); }
     if (pwSub > 0) sections.push({ key:'pwUpsell', category:'🧼 Pressure Cleaning Upsell', zoneName:'', desc:'Full external house wash — offered post-site-clean', addons:pwAdd, subtotal:pwSub });
+  }
+  if (S.roofWash.enabled) {
+    const r = S.roofWash;
+    const roofTierKey = r.doubleStorey ? 'double' : 'single';
+    const roofTierLabel = r.doubleStorey ? 'Double Storey' : 'Single Storey';
+    let roofSub = PRICE.roofWash[roofTierKey][r.beds] || 0;
+    const roofAdd = [{ label:roofTierLabel + ' ' + (r.beds==='5'?'5+':r.beds) + ' Bedroom Roof Wash', price:roofSub }];
+    if (roofSub > 0) sections.push({ key:'roofWash', category:'🏠 Roof Cleaning Upsell', zoneName:'', desc:'Soft wash roof clean — offered alongside house wash', addons:roofAdd, subtotal:roofSub });
   }
   if (S.custom.travelKm > 0) {
     const tCost = S.custom.travelKm * 1.75;
@@ -1487,6 +1417,7 @@ function calcAll() {
   badge('badge-coreDrill', sumKeys('coreDrill'));
   badge('badge-ramping', sumKeys('ramping'));
   badge('badge-pwUpsell', sumKeys('pwUpsell'));
+  badge('badge-roofWash', sumKeys('roofWash'));
   badge('badge-generalAddons', generalAddonsTotal());
   (function() {
     badge('badge-demoSurface', (S.demo.carpet*PRICE.demo.carpet)+(S.demo.laminate*PRICE.demo.laminate)+(S.demo.vinyl*PRICE.demo.vinyl)+(S.demo.tile*PRICE.demo.tile)+(S.demo.tileMosaic*PRICE.demo.tileMosaic));
@@ -1855,11 +1786,10 @@ function restoreQuote(payload) {
     if (!S.overrides) S.overrides = {};
     if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false };
     if (S.custom.travelKm === undefined) S.custom.travelKm = 0;
-    if (!S.client) S.client = freshState().client;
-    if (S.client.suburb === undefined) S.client.suburb = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
     if (!S.coreHoles) S.coreHoles = [];
     if (!S.generalAddons) S.generalAddons = freshState().generalAddons;
+    if (!S.roofWash) S.roofWash = freshState().roofWash;
     S.sealZones.forEach(function(z){ if (z.regrout === undefined) { z.regrout=false; z.regroutSurface='porcelain'; z.regroutOption='overtop'; z.regroutM2=0; } });
     measureShapes = payload.measureShapes || [];
   } else if (payload.client) {
@@ -1921,7 +1851,6 @@ function renderEverything() {
   renderCustomItems();
   renderMeasure();
   syncBoundInputs();
-  populateSuburbDropdown();
   const cpT = document.getElementById('carePromoToggle');
   if (cpT) cpT.checked = !!S.custom.carePromo;
   calcAll();
