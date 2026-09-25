@@ -139,6 +139,7 @@
   <div class="tab" data-tab="addons" onclick="showTab('addons')">➕ Add-Ons</div>
   <div class="tab" data-tab="joints" onclick="showTab('joints')">📐 Joints &amp; Cuts</div>
   <div class="tab" data-tab="demo" onclick="showTab('demo')">🔨 Demo</div>
+  <div class="tab" data-tab="pw" onclick="showTab('pw')">🧼 Pressure Wash</div>
   <div class="tab" data-tab="summary" onclick="showTab('summary')">💰 Summary</div>
   <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Reset</div>
 </div>
@@ -154,7 +155,8 @@
     </div>
     <div class="field"><label>Phone</label><input type="text" data-bind="client.phone" placeholder="04xx xxx xxx"></div>
     <div class="field"><label>Email</label><input type="text" data-bind="client.email" placeholder="john@email.com"></div>
-    <div class="field"><label>Site Address</label><input type="text" data-bind="client.address" placeholder="123 Example St, Gold Coast"></div>
+    <div class="field"><label>Street Address</label><input type="text" data-bind="client.address" placeholder="123 Example St"></div>
+    <div class="field"><label>Suburb</label><select id="suburbSel" data-bind="client.suburb" onchange="onSuburbChange()"><option value="">Select suburb…</option></select><div id="suburbNote" class="info-box" style="font-size:11px;margin-top:6px;">Pick a suburb to auto-apply travel.</div></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
     <div class="field"><label>Quote Reference #</label><input type="text" data-bind="client.ref" placeholder="Assigned automatically when you hit Save"></div>
@@ -214,6 +216,16 @@
       <div class="field"><label>Large (Fist+) $90/ea</label><input type="number" data-bind="spalling.large" min="0" value="0"></div>
       <div class="field"><label>Patched Area m² @$110</label><input type="number" data-bind="spalling.area" min="0" step="0.1" value="0"></div>
     </div>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Concrete Cancer Repair <span class="badge" id="badge-cancer">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:11px;">Measure each patch individually (mm). Chop out, clean rebar, 2-pack epoxy rust-inhibiting primer, patch (Dulux Repair 40 vertical · epoxy/sand or Sikadur paste horizontal). $1,800/m² · $450 minimum callout.</div>
+    <div id="cancerList"></div>
+    <button class="btn-add" onclick="addCancerPatch()">＋ Add Patch</button>
+    <div class="zone-total-line"><div class="zt-label">Total Billable Area</div><div class="zt-value" id="cancerArea">0.000 m²</div></div>
+    <hr class="divider">
+    <div class="field"><label>New Rebar Welded In — lm @$150 (add-on only, needs at least one patch)</label><input type="number" data-bind="cancerRebarLm" min="0" step="0.1" value="0"></div>
+    <div id="cancerRebarWarn" class="info-box" style="font-size:11px;color:var(--red);display:none;">⚠ Rebar is an add-on only. Add at least one patch above or it won't be charged.</div>
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">Ramping / Build-Up Repair <span class="badge" id="badge-ramping">$0</span></div></div>
   <div class="card-body">
@@ -288,6 +300,13 @@
   <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
 </div>
 
+<div id="tab-pw" class="section">
+  <div class="info-box"><strong>Standalone pressure washing.</strong> One tier for the whole job. Oil stains bump the whole job to Heavy. $250 minimum on the wash.</div>
+  <div class="card"><div class="card-header"><div class="card-title">🧼 Pressure Washing <span class="badge" id="badge-pw">$0</span></div></div>
+  <div class="card-body" id="pwContainer"></div></div>
+  <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
+</div>
+
 <div id="tab-summary" class="section">
   <div class="card"><div class="card-header"><div class="card-title">Quote Summary</div>
     <button class="btn-icon" id="pricingToggleBtn" onclick="togglePricingMode()" style="font-size:11px;padding:6px 10px;">🔍 Show Prices</button></div>
@@ -336,6 +355,7 @@
   <div class="card-body">
     <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Enter billable km beyond that — charged at $1.75/km.</div>
     <div class="field"><label>Billable Travel (km) @ $1.75/km</label><input type="number" data-bind="custom.travelKm" min="0" step="1" value="0"></div>
+    <div class="field"><label><input type="checkbox" data-bind="coatingMinOn" checked> Apply $1,800 small job minimum (coating work under 20m²)</label></div>
   </div></div>
 
   <div class="card"><div class="card-header"><div class="card-title">Care Plan Promo</div></div>
@@ -396,7 +416,7 @@
 </div>
 <script>
 const PRICE = {
-  epoxy: { 'Flake Internal':85, 'Flake External':110, 'Quartz Internal':95, 'Metallic Internal':140 },
+  epoxy: { 'Flake Internal':90, 'Flake External':110, 'Quartz Internal':90, 'Metallic Internal':140, 'Solid Colour — Full System':85, 'Solid Colour — No Topcoat':65 },
   flakeUp: { 'Standard':0, 'Marble Tone':5, 'Stone Grip':5, 'Natural Stone':10, 'Classic XL':8, 'Special Blend':12 },
   conc: { 'Hard':0, 'Medium':0, 'Soft':20 },
   coat: { 'None':0, 'Single Paint':10, 'Multi-Paint':20, 'Epoxy Removal':40, 'Poxit Overlay':0 },
@@ -408,10 +428,29 @@ const PRICE = {
   fastcure: { '1':20, '2':40 },
   logo: { '150':'Over-Flake Small — $150', '250':'Over-Flake Medium — $250', '200':'Flat/Dead-Flat Small — $200', '350':'Flat/Dead-Flat Medium — $350' },
   stencil: { '25':'Easy — $25/m²', '40':'Medium — $40/m²', '60':'Hard — $60/m²', '85':'Very Hard — $85/m²' },
-  tintedPrep: { 'Pressure Wash':30, 'Grind Prep':45 },
+  tintedPrep: { 'Pressure Wash':30, 'Grind Prep':60 },
   seal: { 'Essential Seal':20, 'Premium Matte':30, 'Premium Gloss':35, 'Elite Matte':40, 'Elite Gloss':45 },
   sealMin: { 'Essential Seal':200, 'Premium Matte':250, 'Premium Gloss':280, 'Elite Matte':300, 'Elite Gloss':350 },
   sealDesc: { 'Essential Seal':'Entry · damp-tolerant penetrating · satin', 'Premium Matte':'Solvent acrylic · natural/low sheen', 'Premium Gloss':'Solvent wet-look enhancer', 'Elite Matte':'Semi-penetrating · tough · longest matte life', 'Elite Gloss':'2-pack UV gloss · max durability' },
+  coatingMinJob: 1800, coatingMinArea: 20,
+  suburbKm: {
+    'Upper Coomera':0, 'Oxenford':2.5, 'Coomera':4, 'Maudsland':5.2, 'Helensvale':5.5,
+    'Wongawallan':5.6, 'Hope Island':6, 'Pacific Pines':6, 'Pimpama':6.3, 'Willow Vale':6.6,
+    'Gaven':7.5, 'Guanaba':8.3, 'Coombabah':8.5, 'Arundel':9.5, 'Paradise Point':9.6,
+    'Mount Nathan':10, 'Norwell':10.1, 'Runaway Bay':10.4, 'Hollywell':10.4, 'Ormeau Hills':10.5,
+    'Clagiraba':10.7, 'Parkwood':11.3, 'Jacobs Well':12.1, 'Ormeau':12.3, 'Biggera Waters':12.5,
+    'Molendinar':13.4, 'Labrador':13.6, 'Nerang':13.9, 'Highland Park':14.4, 'Southport':14.6,
+    'Yatala':14.9, 'Tamborine Mountain':15, 'Ashmore':15.7, 'Stapylton':15.8, 'Gilston':16.4,
+    'Benowa':16.9, 'Main Beach':17.2, 'Carrara':17.3, 'Bundall':18.5, 'Advancetown':18.6,
+    'Surfers Paradise':19.5, 'Worongary':19.5, 'Merrimac':20.5, 'Canungra':20.8, 'Tallai':21.1,
+    'Clear Island Waters':21.2, 'Broadbeach':21.8, 'Mermaid Waters':22.5, 'Mermaid Beach':23.3,
+    'Robina':23.8, 'Mudgeeraba':24.1, 'Nobby Beach':24.7, 'Varsity Lakes':25.5, 'Miami':25.9,
+    'Reedy Creek':27.4, 'Bonogin':27.7, 'Burleigh Waters':28, 'Burleigh Heads':28.5,
+    'Tallebudgera':30.5, 'Elanora':31.1, 'Palm Beach':31.8, 'Tallebudgera Valley':32.2,
+    'Currumbin Waters':33.8, 'Currumbin':34.2, 'Tugun':36.4, 'Currumbin Valley':37.6,
+    'Bilinga':38.3, 'Kirra':39.5, 'Coolangatta':40.4, 'Tweed Heads':41.3
+  },
+  travelFreeKm: 25, travelRate: 1.75,
   gs: { 'Premium Grind & Seal':85, 'Elite Grind & Seal':90 },
   gsMin: { 'Premium Grind & Seal':450, 'Elite Grind & Seal':450 },
   gsDesc: { 'Premium Grind & Seal':'Grind prep + Premium matte seal · complete finish', 'Elite Grind & Seal':'Grind prep + Elite matte seal · complete finish' },
@@ -440,10 +479,16 @@ const PRICE = {
   coreDrillPvc: 45, coreDrillSilicone: 25,
   care: { 'Level 2 Refresh Coat': {rate:20,min:500}, 'Level 3 Full Rejuvenation': {rate:32,min:900}, 'Level 3 + Reflake': {rate:44,min:900} },
   careNonslip: 10,
-  shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 }
+  shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 },
+  cancer: { rate:1800, min:450, rebar:150 },
+  pw: { 'Basic':5, 'Standard':8, 'Heavy':15 },
+  pwDesc: { 'Basic':'Plain water, no product', 'Standard':'Liquid chlorine, dwell time, no scrubbing', 'Heavy':'Degrease' },
+  pwMin: 250, pwAqua: 10,
+  waste: { 'Light':0.39, 'Medium':0.86, 'Heavy':1.57 },
+  wasteRun: 150
 };
 const SERVICES = [
-  { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic — from $85/m²' },
+  { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic / Solid Colour — from $65/m²' },
   { key:'tinted',   icon:'🎨', name:'Tinted Sealant', rate:'Pressure wash $30/m² · Grind prep $45/m²' },
   { key:'seal',     icon:'💧', name:'Cleaning &amp; Sealing', rate:'Seal only — $20–$45/m²' },
   { key:'gs',       icon:'🪓', name:'Grind &amp; Seal', rate:'Prep + seal — Premium $85/m² · Elite $90/m²' },
@@ -454,16 +499,20 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
     joints: [], softCuts: [], siliconeJoints: [], polyJoints: [], coreHoles: [],
     ramps: [],
+    cancerPatches: [], cancerRebarLm: 0,
+    pwZones: [], pwJob: { tier:'Standard', oil:false, aqua:false },
+    waste: { enabled:false, m2:0, tier:'Medium', runFee:true, runs:1 },
     demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, kitchenArea:0, cabinetryLm:0 },
     pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
     roofWash: { enabled:false, beds:'3', doubleStorey:false },
+    coatingMinOn: true,
     custom: { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false },
     generalAddons: { nonslip:false, nonslipM2:0, mvb:false, mvbM2:0, xtopcoat:false, xtopcoatM2:0, fastcure:false, fastcureCoats:'2', fastcureM2:0, turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' },
     overrides: {}
@@ -505,7 +554,7 @@ function syncBoundInputs() {
   });
 }
 
-const NAV = ['client','measure','services','repairs','details','addons','joints','demo','summary'];
+const NAV = ['client','measure','services','repairs','details','addons','joints','demo','pw','summary'];
 let currentTab = 'client';
 function showTab(name) {
   currentTab = name;
@@ -519,6 +568,8 @@ function showTab(name) {
   if (name === 'details') { renderDetails(); syncBoundInputs(); }
   if (name === 'addons') renderAddons();
   if (name === 'measure') populateMeasureDest();
+  if (name === 'pw') renderPw();
+  if (name === 'repairs') renderCancer();
   calcAll();
   window.scrollTo(0,0);
 }
@@ -571,7 +622,7 @@ function epoxySection() {
     h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Zone ' + (i+1) + '</div><button class="btn-remove" onclick="rmZone(\'epoxyZones\',' + i + ')">✕</button></div>' +
       '<div class="field"><label>Zone Name</label><input type="text" data-bind="epoxyZones.' + i + '.name" placeholder="e.g. Garage Floor"></div>' +
       '<div class="field"><label>System Type</label>' + pills(Object.keys(PRICE.epoxy), z.sys, 'setEZ_sys', i) + '</div>' +
-      (z.sys !== 'Metallic Internal' ? '<div class="field"><label>Flake Range</label>' + pills(Object.keys(PRICE.flakeUp), z.flake, 'setEZ_flake', i) + '</div>' : '') +
+      (z.sys !== 'Metallic Internal' && z.sys.indexOf('Solid Colour') !== 0 ? '<div class="field"><label>Flake Range</label>' + pills(Object.keys(PRICE.flakeUp), z.flake, 'setEZ_flake', i) + '</div>' : '') +
       '<div class="field"><label>Concrete Condition</label>' + pills(Object.keys(PRICE.conc), z.conc, 'setEZ_conc', i) + '</div>' +
       '<div class="field"><label>Existing Coating</label>' + pills(Object.keys(PRICE.coat), z.coat, 'setEZ_coat', i) + '</div>' +
       '<div class="field"><label>Area (m²)</label><input type="number" data-bind="epoxyZones.' + i + '.area" step="0.5" min="0" placeholder="0.00"></div>' +
@@ -581,6 +632,33 @@ function epoxySection() {
   return h;
 }
 function setEZ_sys(i,v){ S.epoxyZones[i].sys=v; renderDetails(); calcAll(); }
+function suburbBillableKm(name){
+  const d = PRICE.suburbKm[name];
+  if (d === undefined) return 0;
+  return Math.max(0, +(d - PRICE.travelFreeKm).toFixed(1));
+}
+function populateSuburbs(){
+  const sel = document.getElementById('suburbSel');
+  if (!sel) return;
+  const names = Object.keys(PRICE.suburbKm).sort();
+  sel.innerHTML = '<option value="">Select suburb…</option>' + names.map(function(n){
+    const b = suburbBillableKm(n);
+    return '<option value="' + n + '"' + (S.client.suburb === n ? ' selected' : '') + '>' + n + (b > 0 ? ' (+' + b + 'km)' : '') + '</option>';
+  }).join('');
+}
+function onSuburbChange(){
+  const sel = document.getElementById('suburbSel');
+  if (!sel) return;
+  S.client.suburb = sel.value;
+  S.custom.travelKm = suburbBillableKm(sel.value);
+  const note = document.getElementById('suburbNote');
+  if (note) {
+    if (!sel.value) note.textContent = 'Pick a suburb to auto-apply travel.';
+    else if (S.custom.travelKm > 0) note.textContent = sel.value + ' — ' + PRICE.suburbKm[sel.value] + 'km out, ' + S.custom.travelKm + 'km billable @ $' + PRICE.travelRate + '/km = $' + (S.custom.travelKm*PRICE.travelRate).toFixed(2);
+    else note.textContent = sel.value + ' — within the ' + PRICE.travelFreeKm + 'km free zone, no travel fee.';
+  }
+  syncBoundInputs(); calcAll();
+}
 function setEZ_flake(i,v){ S.epoxyZones[i].flake=v; renderDetails(); calcAll(); }
 function setEZ_conc(i,v){ S.epoxyZones[i].conc=v; renderDetails(); calcAll(); }
 function setEZ_coat(i,v){ S.epoxyZones[i].coat=v; renderDetails(); calcAll(); }
@@ -757,6 +835,7 @@ function addZone(type) {
   if (type === 'polished') S.polishedZones.push({ name:'', gloss:'Satin', area:0 });
   if (type === 'care') S.careZones.push({ name:'', type:'Level 2 Refresh Coat', area:0, nonslip:false });
   if (type === 'shine') S.shineZones.push({ name:'', tier:'Standard — Clean, Apply & Light Buff', area:0 });
+  if (type === 'pw') { S.pwZones.push({ name:'', area:0 }); renderPw(); }
   renderDetails(); calcAll();
 }
 function rmZone(listName, i) { S[listName].splice(i,1); renderDetails(); renderAddons(); calcAll(); }
@@ -764,6 +843,7 @@ function rmZone(listName, i) { S[listName].splice(i,1); renderDetails(); renderA
 function renderAddons() {
   const c = document.getElementById('addonsContainer');
   let h = generalAddonsCard();
+  h += wasteCard();
   h += pwUpsellCard();
   h += roofWashCard();
   if (S.epoxyZones.length > 0) {
@@ -805,6 +885,7 @@ function renderAddons() {
       '</div></div>';
   });
   c.innerHTML = h;
+  syncBoundInputs();
 }
 function gaTgl(key, label, price, checked) {
   return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price">' + price + '</div>' +
@@ -1032,6 +1113,142 @@ function renderRamps() {
       '</div><hr class="divider"></div>';
   }).join('');
 }
+// ===== CONCRETE CANCER =====
+function addCancerPatch() { S.cancerPatches.push({ name:'', lengthMm:0, widthMm:0, qty:1 }); renderCancer(); calcAll(); }
+function rmCancerPatch(i) { S.cancerPatches.splice(i,1); renderCancer(); calcAll(); }
+function cancerPatchArea(p) { return ((p.lengthMm||0) * (p.widthMm||0) * (p.qty||1)) / 1e6; }
+function cancerCalc() {
+  let area = 0;
+  S.cancerPatches.forEach(function(p){ area += cancerPatchArea(p); });
+  const byArea = area * PRICE.cancer.rate;
+  const base = area > 0 ? Math.max(byArea, PRICE.cancer.min) : 0;
+  const rebar = base > 0 ? (S.cancerRebarLm||0) * PRICE.cancer.rebar : 0;
+  return { area:area, byArea:byArea, base:base, minApplied: area > 0 && byArea < PRICE.cancer.min, rebar:rebar, total:base + rebar };
+}
+function renderCancer() {
+  const el = document.getElementById('cancerList');
+  if (!el) return;
+  el.innerHTML = S.cancerPatches.map(function(p,i) {
+    return '<div style="margin-bottom:12px;"><div class="line-item-row">' +
+      '<div class="field"><label>Patch ' + (i+1) + ' Description</label><input type="text" value="' + (p.name||'').replace(/"/g,'&quot;') + '" placeholder="e.g. Balcony edge, north side" oninput="S.cancerPatches[' + i + '].name=this.value"></div>' +
+      '<button class="btn-remove" onclick="rmCancerPatch(' + i + ')">✕</button></div>' +
+      '<div class="row">' +
+      '<div class="field"><label>Length (mm)</label><input type="number" value="' + p.lengthMm + '" min="0" step="10" oninput="S.cancerPatches[' + i + '].lengthMm=parseFloat(this.value)||0;updateCancerAreas();calcAll()"></div>' +
+      '<div class="field"><label>Width (mm)</label><input type="number" value="' + p.widthMm + '" min="0" step="10" oninput="S.cancerPatches[' + i + '].widthMm=parseFloat(this.value)||0;updateCancerAreas();calcAll()"></div>' +
+      '<div class="field"><label>Qty</label><input type="number" value="' + p.qty + '" min="1" step="1" oninput="S.cancerPatches[' + i + '].qty=parseInt(this.value)||1;updateCancerAreas();calcAll()"></div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--muted);">Patch area: <strong style="color:var(--white);" id="cancerPatchArea-' + i + '">' + cancerPatchArea(p).toFixed(3) + ' m²</strong></div>' +
+      '<hr class="divider"></div>';
+  }).join('');
+  updateCancerAreas();
+}
+function updateCancerAreas() {
+  S.cancerPatches.forEach(function(p,i){ const e = document.getElementById('cancerPatchArea-'+i); if (e) e.textContent = cancerPatchArea(p).toFixed(3) + ' m²'; });
+  const c = cancerCalc();
+  const a = document.getElementById('cancerArea');
+  if (a) a.textContent = c.area.toFixed(3) + ' m²' + (c.minApplied ? ' · $450 min applies' : '');
+  const w = document.getElementById('cancerRebarWarn');
+  if (w) w.style.display = ((S.cancerRebarLm||0) > 0 && c.area <= 0) ? 'block' : 'none';
+}
+function cancerSection() {
+  const c = cancerCalc();
+  if (c.base <= 0) return null;
+  const add = [];
+  S.cancerPatches.forEach(function(p,i) {
+    const a = cancerPatchArea(p);
+    if (a <= 0) return;
+    add.push({ label:(p.name||'Patch '+(i+1)) + ' — ' + p.lengthMm + ' × ' + p.widthMm + 'mm' + ((p.qty||1) > 1 ? ' × ' + p.qty : '') + ' (' + a.toFixed(3) + 'm²)', price:a*PRICE.cancer.rate });
+  });
+  if (c.minApplied) add.push({ label:'Minimum callout top-up ($' + PRICE.cancer.min + ' min)', price:c.base - c.byArea });
+  if (c.rebar > 0) add.push({ label:'New rebar welded in — ' + S.cancerRebarLm + 'lm @ $' + PRICE.cancer.rebar + '/lm', price:c.rebar });
+  return { key:'cancer', category:'🔧 Concrete Cancer Repair', zoneName:'', desc:'Chop out affected concrete, clean rebar, epoxy rust-inhibiting primer, patch · ' + c.area.toFixed(3) + 'm² total', addons:add, subtotal:c.total };
+}
+
+// ===== PRESSURE WASHING =====
+function pwTier() { return S.pwJob.oil ? 'Heavy' : S.pwJob.tier; }
+function pwCalc() {
+  let area = 0;
+  S.pwZones.forEach(function(z){ area += (z.area||0); });
+  const tier = pwTier();
+  const byArea = area * PRICE.pw[tier];
+  const wash = area > 0 ? Math.max(byArea, PRICE.pwMin) : 0;
+  const aqua = (S.pwJob.aqua && area > 0) ? area * PRICE.pwAqua : 0;
+  return { area:area, tier:tier, byArea:byArea, wash:wash, minApplied: area > 0 && byArea < PRICE.pwMin, aqua:aqua, total:wash + aqua };
+}
+function setPwTier(i, v) { S.pwJob.tier = v; renderPw(); calcAll(); }
+function addPwZone() { S.pwZones.push({ name:'', area:0 }); renderPw(); populateMeasureDest(); calcAll(); }
+function rmPwZone(i) { S.pwZones.splice(i,1); renderPw(); populateMeasureDest(); calcAll(); }
+function renderPw() {
+  const c = document.getElementById('pwContainer');
+  if (!c) return;
+  const j = S.pwJob;
+  let h = '<div class="field"><label>Tier (whole job)</label>' + pills(Object.keys(PRICE.pw), pwTier(), 'setPwTier', 0) + '</div>' +
+    '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + PRICE.pwDesc[pwTier()] + ' · <strong>$' + PRICE.pw[pwTier()] + '/m²</strong> · min $' + PRICE.pwMin + '</div>' +
+    '<div class="toggle-row"><div class="toggle-label">Oil Stains Present</div><div class="toggle-price">forces Heavy</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (j.oil?'checked':'') + ' onchange="S.pwJob.oil=this.checked;renderPw();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (j.oil ? '<div style="font-size:10px;color:var(--gold);margin:-4px 0 10px;">Whole job bumped to Heavy (degrease) because of oil stains.</div>' : '');
+  S.pwZones.forEach(function(z, i) {
+    h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Area ' + (i+1) + '</div><button class="btn-remove" onclick="rmPwZone(' + i + ')">✕</button></div>' +
+      '<div class="row"><div class="field"><label>Area Name</label><input type="text" data-bind="pwZones.' + i + '.name" placeholder="e.g. Driveway"></div>' +
+      '<div class="field"><label>Area (m²)</label><input type="number" data-bind="pwZones.' + i + '.area" step="0.5" min="0"></div></div></div>';
+  });
+  h += '<button class="btn-add" onclick="addPwZone()">＋ Add Wash Area</button><hr class="divider">' +
+    '<div class="toggle-row"><div class="toggle-label">AquaSeal After Wash</div><div class="toggle-price">+$' + PRICE.pwAqua + '/m²</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (j.aqua?'checked':'') + ' onchange="S.pwJob.aqua=this.checked;calcAll()"><span class="toggle-slider"></span></label></div>' +
+    '<div class="zone-total-line"><div class="zt-label">Wash Total</div><div class="zt-value" id="pwTotal">$0</div></div>';
+  c.innerHTML = h;
+  syncBoundInputs();
+}
+function pwSection() {
+  const c = pwCalc();
+  if (c.total <= 0) return null;
+  const add = [];
+  S.pwZones.forEach(function(z,i) {
+    if (!(z.area > 0)) return;
+    add.push({ label:(z.name||'Area '+(i+1)) + ' — ' + z.area + 'm² @ $' + PRICE.pw[c.tier] + '/m²', price:z.area*PRICE.pw[c.tier] });
+  });
+  if (c.minApplied) add.push({ label:'Minimum callout top-up ($' + PRICE.pwMin + ' min)', price:c.wash - c.byArea });
+  if (c.aqua > 0) add.push({ label:'AquaSeal after wash — ' + c.area + 'm² @ $' + PRICE.pwAqua + '/m²', price:c.aqua });
+  return { key:'pw', category:'🧼 Pressure Washing', zoneName:'', desc:c.tier + ' tier (' + PRICE.pwDesc[c.tier].toLowerCase() + ')' + (S.pwJob.oil ? ', oil stains' : '') + ' · ' + c.area + 'm²', addons:add, subtotal:c.total };
+}
+
+// ===== WASTE DISPOSAL (GRINDING) =====
+function jobGrindArea() {
+  let a = 0;
+  ['epoxyZones','gsZones','grindZones','polishedZones'].forEach(function(l){ S[l].forEach(function(z){ a += (z.area||0); }); });
+  S.tintedZones.forEach(function(z){ if (z.prep === 'Grind Prep') a += (z.area||0); });
+  return Math.round(a*100)/100;
+}
+function useGrindArea() { S.waste.m2 = jobGrindArea(); renderAddons(); calcAll(); }
+function setWasteTier(i, v) { S.waste.tier = v; renderAddons(); calcAll(); }
+function wasteCard() {
+  const w = S.waste;
+  let h = '<div class="card"><div class="card-header"><div class="card-title">🚛 Grinding Waste Disposal <span class="badge" id="badge-waste">$0</span></div></div><div class="card-body">' +
+    '<div class="toggle-row"><div class="toggle-label">Charge Waste Disposal</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (w.enabled?'checked':'') + ' onchange="S.waste.enabled=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>';
+  if (w.enabled) {
+    const ga = jobGrindArea();
+    h += '<div class="field"><label>Grind Depth</label>' + pills(Object.keys(PRICE.waste), w.tier, 'setWasteTier', 0) + '</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin:-6px 0 10px;">Light $' + PRICE.waste.Light + '/m² · Medium $' + PRICE.waste.Medium + '/m² · Heavy $' + PRICE.waste.Heavy + '/m²</div>' +
+      '<div class="field"><label>Ground Area (m²)</label><input type="number" data-bind="waste.m2" step="0.5" min="0"></div>' +
+      (ga > 0 ? '<button class="btn-icon" style="width:100%;margin-bottom:10px;font-size:11px;" onclick="useGrindArea()">Use job grind area (' + ga + ' m²)</button>' : '') +
+      '<div class="toggle-row"><div class="toggle-label">Disposal Run Travel Fee</div><div class="toggle-price">$' + PRICE.wasteRun + '/run</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (w.runFee?'checked':'') + ' onchange="S.waste.runFee=this.checked;renderAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+      (w.runFee ? '<div class="field" style="padding-left:8px;"><label>Tip Runs</label><input type="number" data-bind="waste.runs" step="1" min="1"></div>' : '');
+  }
+  return h + '</div></div>';
+}
+function wasteSections() {
+  const w = S.waste, out = [];
+  if (!w.enabled) return out;
+  const rate = PRICE.waste[w.tier] || 0;
+  const fee = (w.m2||0) * rate;
+  if (fee > 0) out.push({ key:'waste', category:'🚛 Waste Disposal', zoneName:'', desc:w.tier + ' grind · ' + w.m2 + 'm² @ $' + rate + '/m²', addons:[], subtotal:fee });
+  const runs = Math.max(0, Math.round(w.runs||0));
+  if (w.runFee && runs > 0) out.push({ key:'wasteRun', category:'🚛 Disposal Run Travel', zoneName:'', desc:runs + ' tip run' + (runs===1?'':'s') + ' @ $' + PRICE.wasteRun + '/run', addons:[], subtotal:runs*PRICE.wasteRun });
+  return out;
+}
+
 function addCustomItem() { S.custom.items.push({ desc:'', price:0 }); renderCustomItems(); calcAll(); }
 function rmCustomItem(i) { S.custom.items.splice(i,1); renderCustomItems(); calcAll(); }
 function renderCustomItems() {
@@ -1117,6 +1334,9 @@ function populateMeasureDest() {
       o += '<option value="NEW:' + m.key + '">' + m.icon + ' ' + m.label + ' — ＋ another zone</option>';
     }
   });
+  S.pwZones.forEach(function(z,i){ o += '<option value="pwZones.' + i + '.area">🧼 Pressure Wash — ' + (z.name||'Area '+(i+1)) + '</option>'; });
+  o += '<option value="NEW:pw">🧼 Pressure Wash — ＋ ' + (S.pwZones.length ? 'another' : 'new') + ' area</option>';
+  if (S.waste.enabled) o += '<option value="waste.m2">🚛 Waste Disposal — Ground Area</option>';
   if (S.services['epoxy'] || S.spalling) o += '<option value="spalling.area">🔧 Spalling — Patched Area</option>';
   o += '<option value="demo.carpet">🔨 Demo — Carpet Removal</option>';
   o += '<option value="demo.laminate">🔨 Demo — Laminate Removal</option>';
@@ -1135,11 +1355,13 @@ function sendMeasureTo() {
   if (dest.indexOf('NEW:') === 0) {
     const key = dest.split(':')[1];
     addZone(key);
-    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones' }[key];
+    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', pw:'pwZones' }[key];
     dest = listName + '.' + (S[listName].length - 1) + '.area';
   }
   setPath(S, dest, parseFloat(total.toFixed(2)));
   renderDetails();
+  renderPw();
+  renderAddons();
   populateMeasureDest();
   syncBoundInputs();
   calcAll();
@@ -1150,7 +1372,7 @@ function epoxyZoneTotal(z) {
   const area = z.area || 0;
   const a = z.addons;
   let rate = PRICE.epoxy[z.sys] || 85;
-  if (z.sys !== 'Metallic Internal') rate += PRICE.flakeUp[z.flake] || 0;
+  if (z.sys !== 'Metallic Internal' && z.sys.indexOf('Solid Colour') !== 0) rate += PRICE.flakeUp[z.flake] || 0;
   rate += PRICE.conc[z.conc] || 0;
   rate += PRICE.coat[z.coat] || 0;
   let total = area * rate;
@@ -1189,7 +1411,7 @@ function buildSections() {
   S.epoxyZones.forEach(function(z,i) {
     if (!z.area) return;
     let desc = z.sys;
-    if (z.sys !== 'Metallic Internal' && z.flake !== 'Standard') desc += ' — ' + z.flake;
+    if (z.sys !== 'Metallic Internal' && z.sys.indexOf('Solid Colour') !== 0 && z.flake !== 'Standard') desc += ' — ' + z.flake;
     desc += ' · ' + z.area + 'm² · Diamond Grind Included';
     sections.push({ key:'epoxy-'+i, category:'🪨 Epoxy Floor System', zoneName:z.name||('Zone '+(i+1)), desc:desc, addons:epoxyAddonsList(z), subtotal:epoxyZoneTotal(z) });
   });
@@ -1318,6 +1540,7 @@ function buildSections() {
     const matLabel = c.material === 'rapidset' ? (c.buckets + ' × 10kg Rapidset bucket' + (c.buckets===1?'':'s')) : ('Epoxy + Sand Build-Up, ' + c.batches + ' batch' + (c.batches===1?'':'es'));
     rampAdd.push({ label:(r.name||'Ramp '+(i+1)) + ' — ' + r.rise + 'mm rise × ' + r.width + 'm wide (' + matLabel + ')', price:c.cost });
   });
+  const cancerSec = cancerSection(); if (cancerSec) sections.push(cancerSec);
   if (rampSub > 0) sections.push({ key:'ramping', category:'🛠 Ramping / Build-Up Repair', zoneName:'', desc:'', addons:rampAdd, subtotal:rampSub });
   const d = S.demo; const dAdd = []; let dSub = 0;
   if (d.carpet > 0) { const p = d.carpet*PRICE.demo.carpet; dSub += p; dAdd.push({label:'Carpet & Underlay — ' + d.carpet + 'm²', price:p}); }
@@ -1333,6 +1556,8 @@ function buildSections() {
   }
   if (d.cabinetryLm > 0) { const p = d.cabinetryLm*PRICE.demo.cabinetry; dSub += p; dAdd.push({label:'Overhead/Upper Cabinetry — ' + d.cabinetryLm + 'lm', price:p}); }
   if (dSub > 0) sections.push({ key:'demo', category:'🔨 Demolition & Strip-Out', zoneName:'', desc:'', addons:dAdd, subtotal:dSub });
+  wasteSections().forEach(function(s){ sections.push(s); });
+  const pwSec = pwSection(); if (pwSec) sections.push(pwSec);
   const gaList = generalAddonsList();
   if (gaList.length > 0) {
     const gaSub = gaList.reduce(function(s,x){ return s + x.price; }, 0);
@@ -1356,9 +1581,26 @@ function buildSections() {
     if (roofSub > 0) sections.push({ key:'roofWash', category:'🏠 Roof Cleaning Upsell', zoneName:'', desc:'Soft wash roof clean — offered alongside house wash', addons:roofAdd, subtotal:roofSub });
   }
   if (S.custom.travelKm > 0) {
-    const tCost = S.custom.travelKm * 1.75;
-    sections.push({ key:'travel', category:'🚗 Travel', zoneName:'', desc:S.custom.travelKm + 'km beyond 25km of Coomera @ $1.75/km', addons:[], subtotal:tCost });
+    const tCost = S.custom.travelKm * PRICE.travelRate;
+    sections.push({ key:'travel', category:'🚗 Travel', zoneName:'', desc:(S.client.suburb ? S.client.suburb + ' — ' : '') + S.custom.travelKm + 'km beyond ' + PRICE.travelFreeKm + 'km free zone @ $' + PRICE.travelRate + '/km', addons:[], subtotal:tCost });
   }
+  (function(){
+    if (!S.coatingMinOn) return;
+    var prefixes = ['epoxy-','tinted-','gs-','polished-'];
+    var area = 0, sub = 0;
+    S.epoxyZones.forEach(function(z){ area += (z.area||0); });
+    S.tintedZones.forEach(function(z){ area += (z.area||0); });
+    S.gsZones.forEach(function(z){ area += (z.area||0); });
+    S.polishedZones.forEach(function(z){ area += (z.area||0); });
+    if (area <= 0 || area >= PRICE.coatingMinArea) return;
+    sections.forEach(function(sec){
+      prefixes.forEach(function(pfx){ if (sec.key.indexOf(pfx) === 0) sub += sec.subtotal; });
+    });
+    if (sub <= 0 || sub >= PRICE.coatingMinJob) return;
+    sections.push({ key:'coatingMin', category:'📏 Small Job Minimum', zoneName:'',
+      desc:'Coating work under ' + PRICE.coatingMinArea + 'm² (' + area + 'm²) — minimum charge $' + PRICE.coatingMinJob,
+      addons:[], subtotal: PRICE.coatingMinJob - sub });
+  })();
   return sections;
 }
 function effSub(sec) {
@@ -1416,6 +1658,11 @@ function calcAll() {
   badge('badge-polyJoints', sumKeys('polyJoints'));
   badge('badge-coreDrill', sumKeys('coreDrill'));
   badge('badge-ramping', sumKeys('ramping'));
+  badge('badge-cancer', cancerCalc().total);
+  badge('badge-pw', pwCalc().total);
+  badge('badge-waste', sumKeys('waste'));
+  (function(){ const e = document.getElementById('pwTotal'); if (e) e.textContent = fmt(pwCalc().total); })();
+  updateCancerAreas();
   badge('badge-pwUpsell', sumKeys('pwUpsell'));
   badge('badge-roofWash', sumKeys('roofWash'));
   badge('badge-generalAddons', generalAddonsTotal());
@@ -1598,7 +1845,7 @@ function generatePDF() {
     '<div class="client-row"><div class="client-label">Client Full Name:</div><div class="client-value">' + client + '</div></div>' +
     '<div class="client-row"><div class="client-label">Phone:</div><div class="client-value">' + (c.phone||'—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Email:</div><div class="client-value">' + (c.email||'—') + '</div></div>' +
-    '<div class="client-row"><div class="client-label">Site Address:</div><div class="client-value">' + (c.address||'—') + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Site Address:</div><div class="client-value">' + ((c.address||'') + (c.suburb ? (c.address ? ', ' : '') + c.suburb : '') || '—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Quote Reference #:</div><div class="client-value">' + (c.ref||'—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Date:</div><div class="client-value">' + (c.date||'—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Quote Valid Until:</div><div class="client-value">' + (c.valid||'—') + '</div></div></div>' +
@@ -1644,7 +1891,7 @@ function generateInvoice() {
     '<div class="client-row"><div class="client-label">Invoice To:</div><div class="client-value"><strong>' + client + '</strong></div></div>' +
     '<div class="client-row"><div class="client-label">Phone:</div><div class="client-value">' + (c.phone||'—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Email:</div><div class="client-value">' + (c.email||'—') + '</div></div>' +
-    '<div class="client-row"><div class="client-label">Site Address:</div><div class="client-value">' + (c.address||'—') + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Site Address:</div><div class="client-value">' + ((c.address||'') + (c.suburb ? (c.address ? ', ' : '') + c.suburb : '') || '—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Quote Reference:</div><div class="client-value">' + (c.ref||'—') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Invoice Date:</div><div class="client-value">' + today.toLocaleDateString('en-AU') + '</div></div>' +
     '<div class="client-row"><div class="client-label">Due Date:</div><div class="client-value">' + dueDate.toLocaleDateString('en-AU') + '</div></div></div>' +
@@ -1786,10 +2033,17 @@ function restoreQuote(payload) {
     if (!S.overrides) S.overrides = {};
     if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false };
     if (S.custom.travelKm === undefined) S.custom.travelKm = 0;
+    if (S.coatingMinOn === undefined) S.coatingMinOn = true;
+    if (S.client && S.client.suburb === undefined) S.client.suburb = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
     if (!S.coreHoles) S.coreHoles = [];
     if (!S.generalAddons) S.generalAddons = freshState().generalAddons;
     if (!S.roofWash) S.roofWash = freshState().roofWash;
+    if (!S.cancerPatches) S.cancerPatches = [];
+    if (S.cancerRebarLm === undefined) S.cancerRebarLm = 0;
+    if (!S.pwZones) S.pwZones = [];
+    if (!S.pwJob) S.pwJob = freshState().pwJob;
+    if (!S.waste) S.waste = freshState().waste;
     S.sealZones.forEach(function(z){ if (z.regrout === undefined) { z.regrout=false; z.regroutSurface='porcelain'; z.regroutOption='overtop'; z.regroutM2=0; } });
     measureShapes = payload.measureShapes || [];
   } else if (payload.client) {
@@ -1838,6 +2092,7 @@ function initDates() {
   S.client.ref = '';
 }
 function renderEverything() {
+  populateSuburbs();
   renderServices();
   renderDetails();
   renderAddons();
@@ -1848,6 +2103,8 @@ function renderEverything() {
   renderPolyJoints();
   renderCoreHoles();
   renderRamps();
+  renderCancer();
+  renderPw();
   renderCustomItems();
   renderMeasure();
   syncBoundInputs();
