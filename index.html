@@ -141,13 +141,13 @@
   <div class="tab" data-tab="demo" onclick="showTab('demo')">🔨 Demo</div>
   <div class="tab" data-tab="pw" onclick="showTab('pw')">🧼 Pressure Wash</div>
   <div class="tab" data-tab="summary" onclick="showTab('summary')">💰 Summary</div>
-  <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Reset</div>
+  <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Clear Job</div>
 </div>
 
 <div class="content">
 
 <div id="tab-client" class="section active">
-  <div class="card"><div class="card-header"><div class="card-title">Client Details</div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Client Details</div><button class="btn-icon" style="color:var(--red);font-size:12px;padding:4px 10px;" onclick="clearClient()">✖ Clear Client</button></div>
   <div class="card-body">
     <div class="row">
       <div class="field"><label>First Name</label><input type="text" data-bind="client.first" placeholder="John"></div>
@@ -354,7 +354,8 @@
   <div class="card"><div class="card-header"><div class="card-title">Travel</div></div>
   <div class="card-body">
     <div class="info-box" style="font-size:11px;">Free within 25km of Coomera. Enter billable km beyond that — charged at $1.75/km.</div>
-    <div class="field"><label>Billable Travel (km) @ $1.75/km</label><input type="number" data-bind="custom.travelKm" min="0" step="1" value="0"></div>
+    <div class="field"><label>Billable Travel (km one way) @ $1.75/km</label><input type="number" data-bind="custom.travelKm" min="0" step="1" value="0"></div>
+    <div class="field"><label>Days On Site</label><input type="number" id="travelDays" data-bind="custom.travelDays" min="1" step="1" value="1" onchange="onSuburbChange()"><div class="info-box" style="font-size:11px;margin-top:6px;">Travel is charged as a return trip for each day on site.</div></div>
     <div class="field"><label><input type="checkbox" data-bind="coatingMinOn" checked> Apply $1,800 small job minimum (coating work under 20m²)</label></div>
   </div></div>
 
@@ -402,7 +403,8 @@
     </div>
     <div class="price-actions">
       <button class="btn-icon" onclick="showTab('summary')">📊 Summary</button>
-      <button class="btn-icon gold" onclick="saveQuote()">💾 Save</button>
+      <button class="btn-icon gold" id="btnSaveNew" onclick="saveQuote('new')">💾 Save New</button>
+      <button class="btn-icon" id="btnUpdate" onclick="saveQuote('update')" style="display:none;">♻️ Update</button>
     </div>
   </div>
 </div>
@@ -489,7 +491,7 @@ const PRICE = {
 };
 const SERVICES = [
   { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic / Solid Colour — from $65/m²' },
-  { key:'tinted',   icon:'🎨', name:'Tinted Sealant', rate:'Pressure wash $30/m² · Grind prep $45/m²' },
+  { key:'tinted',   icon:'🎨', name:'Tinted Sealant', rate:'Pressure wash $30/m² · Grind prep $60/m²' },
   { key:'seal',     icon:'💧', name:'Cleaning &amp; Sealing', rate:'Seal only — $20–$45/m²' },
   { key:'gs',       icon:'🪓', name:'Grind &amp; Seal', rate:'Prep + seal — Premium $85/m² · Elite $90/m²' },
   { key:'grind',    icon:'⚙️', name:'Concrete Grinding', rate:'$40–$50/m²' },
@@ -513,7 +515,8 @@ function freshState() {
     pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
     roofWash: { enabled:false, beds:'3', doubleStorey:false },
     coatingMinOn: true,
-    custom: { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false },
+    saveKey: '',
+    custom: { adjustType:'none', adjustAmount:0, items: [], travelKm:0, travelDays:1, carePromo:false },
     generalAddons: { nonslip:false, nonslipM2:0, mvb:false, mvbM2:0, xtopcoat:false, xtopcoatM2:0, fastcure:false, fastcureCoats:'2', fastcureM2:0, turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' },
     overrides: {}
   };
@@ -654,7 +657,10 @@ function onSuburbChange(){
   const note = document.getElementById('suburbNote');
   if (note) {
     if (!sel.value) note.textContent = 'Pick a suburb to auto-apply travel.';
-    else if (S.custom.travelKm > 0) note.textContent = sel.value + ' — ' + PRICE.suburbKm[sel.value] + 'km out, ' + S.custom.travelKm + 'km billable @ $' + PRICE.travelRate + '/km = $' + (S.custom.travelKm*PRICE.travelRate).toFixed(2);
+    else if (S.custom.travelKm > 0) {
+      const d = Math.max(1, parseInt(S.custom.travelDays) || 1);
+      note.textContent = sel.value + ' — ' + PRICE.suburbKm[sel.value] + 'km out, ' + S.custom.travelKm + 'km billable each way, return x ' + d + ' day' + (d>1?'s':'') + ' = $' + (S.custom.travelKm*2*d*PRICE.travelRate).toFixed(2);
+    }
     else note.textContent = sel.value + ' — within the ' + PRICE.travelFreeKm + 'km free zone, no travel fee.';
   }
   syncBoundInputs(); calcAll();
@@ -1581,8 +1587,10 @@ function buildSections() {
     if (roofSub > 0) sections.push({ key:'roofWash', category:'🏠 Roof Cleaning Upsell', zoneName:'', desc:'Soft wash roof clean — offered alongside house wash', addons:roofAdd, subtotal:roofSub });
   }
   if (S.custom.travelKm > 0) {
-    const tCost = S.custom.travelKm * PRICE.travelRate;
-    sections.push({ key:'travel', category:'🚗 Travel', zoneName:'', desc:(S.client.suburb ? S.client.suburb + ' — ' : '') + S.custom.travelKm + 'km beyond ' + PRICE.travelFreeKm + 'km free zone @ $' + PRICE.travelRate + '/km', addons:[], subtotal:tCost });
+    const tDays = Math.max(1, parseInt(S.custom.travelDays) || 1);
+    const tKm = S.custom.travelKm * 2 * tDays;
+    const tCost = tKm * PRICE.travelRate;
+    sections.push({ key:'travel', category:'🚗 Travel', zoneName:'', desc:(S.client.suburb ? S.client.suburb + ' — ' : '') + S.custom.travelKm + 'km each way beyond ' + PRICE.travelFreeKm + 'km free zone, return trip x ' + tDays + ' day' + (tDays>1?'s':'') + ' = ' + tKm.toFixed(1) + 'km @ $' + PRICE.travelRate + '/km', addons:[], subtotal:tCost });
   }
   (function(){
     if (!S.coatingMinOn) return;
@@ -1926,34 +1934,104 @@ function generateInvoice() {
   openDoc(html);
 }
 // ===== SAVE / LOAD / DELETE =====
-async function saveQuote() {
-  const today = new Date();
-  const num = (parseInt(localStorage.getItem('poxit_quote_num') || '0') + 1);
-  localStorage.setItem('poxit_quote_num', num);
-  S.client.ref = 'PXT-' + today.getFullYear() + '-' + ('00' + num).slice(-3);
+function quoteServiceLabel(payload) {
+  try {
+    const st = (typeof payload === 'string' ? JSON.parse(payload) : payload);
+    const sv = (st && st.state && st.state.services) || {};
+    const names = SERVICES.filter(function(x){ return sv[x.key]; })
+      .map(function(x){ return x.name.replace(/&amp;/g,'&'); });
+    if (st && st.state) {
+      const ex = st.state;
+      if (ex.pwJob && ex.pwZones && ex.pwZones.length) names.push('Pressure Washing');
+      if (ex.cancerPatches && ex.cancerPatches.length) names.push('Concrete Cancer');
+      if (ex.demo && Object.keys(ex.demo).some(function(k){ return ex.demo[k] > 0; })) names.push('Demolition');
+    }
+    if (!names.length) return '';
+    return names.length > 3 ? names.slice(0,3).join(' + ') + ' +' + (names.length-3) : names.join(' + ');
+  } catch(e) { return ''; }
+}
+function stampNow() {
+  const d = new Date();
+  return d.toLocaleDateString('en-AU') + ' ' + d.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit' });
+}
+
+async function findDuplicateQuote(name, total) {
+  const norm = (name || '').trim().toLowerCase();
+  if (!norm || norm === 'unnamed quote') return null;
+  let rows = [];
+  try {
+    const res = await fetch(SHEET_URL + '?action=load');
+    const data = await res.json();
+    rows = (data.quotes || []).filter(function(q){ return q.key && q.name; });
+  } catch(e) {
+    rows = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
+  }
+  return rows.filter(function(q){ return q.key !== S.saveKey; })
+    .find(function(q){
+      return (q.name || '').trim().toLowerCase() === norm &&
+             Math.abs((parseFloat(q.total) || 0) - total) < 1;
+    }) || null;
+}
+async function saveQuote(mode) {
+  mode = mode || 'new';
+  const isUpdate = (mode === 'update' && S.saveKey);
+  if (!isUpdate) {
+    syncBoundInputs();
+    const dupName = (S.client.first + ' ' + S.client.last).trim();
+    const dup = await findDuplicateQuote(dupName, calcAll());
+    if (dup) {
+      const msg = 'You already have a saved quote for ' + dup.name + ' at the same total' +
+        (dup.ref ? ' (' + dup.ref + ')' : '') + ', saved ' + dup.date + '.\n\n' +
+        'OK = open that quote instead, so you can Update it.\nCancel = save this as a new quote anyway.';
+      if (confirm(msg)) {
+        closeSaveLoad();
+        if (localStorage.getItem(dup.key)) loadQuoteLocal(dup.key); else await loadQuote(dup.key);
+        return;
+      }
+    }
+    const today = new Date();
+    const num = (parseInt(localStorage.getItem('poxit_quote_num') || '0') + 1);
+    localStorage.setItem('poxit_quote_num', num);
+    S.client.ref = 'PXT-' + today.getFullYear() + '-' + ('00' + num).slice(-3);
+    S.saveKey = 'PXT-' + Date.now();
+  }
   syncBoundInputs();
   const name = (S.client.first + ' ' + S.client.last).trim() || 'Unnamed Quote';
   const total = calcAll();
-  const key = 'PXT-' + Date.now();
-  const date = new Date().toLocaleDateString('en-AU');
+  const key = S.saveKey;
+  const date = stampNow();
   const payload = { state: S, measureShapes: measureShapes };
-  const btn = document.querySelector('.price-bar .btn-icon.gold');
+  const btn = document.getElementById(isUpdate ? 'btnUpdate' : 'btnSaveNew');
+  const btnLabel = isUpdate ? '♻️ Update' : '💾 Save New';
   if (btn) { btn.textContent = '⏳ Saving...'; btn.disabled = true; }
   try {
+    if (isUpdate) {
+      try { await fetch(SHEET_URL + '?action=delete&key=' + encodeURIComponent(key)); } catch(e) {}
+    }
     const params = new URLSearchParams({ action:'save', key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref, payload: JSON.stringify(payload) });
     const res = await fetch(SHEET_URL + '?' + params.toString());
     const data = await res.json();
-    if (data.status === 'saved') alert('✅ Quote saved: ' + name);
+    if (data.status === 'saved') alert(isUpdate ? ('♻️ Quote updated: ' + S.client.ref) : ('✅ Quote saved: ' + name + ' (' + S.client.ref + ')'));
     else throw new Error(data.message || 'Unknown error');
   } catch(e) {
     localStorage.setItem(key, JSON.stringify(payload));
     const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
-    saves.push({ key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref });
+    const row = { key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref };
+    const at = saves.findIndex(function(x){ return x.key === key; });
+    if (at > -1) saves[at] = row; else saves.push(row);
     localStorage.setItem('poxit_saves', JSON.stringify(saves));
-    alert('✅ Saved locally (offline mode)');
+    alert(isUpdate ? '♻️ Updated locally (offline mode)' : '✅ Saved locally (offline mode)');
   } finally {
-    if (btn) { btn.textContent = '💾 Save'; btn.disabled = false; }
+    if (btn) { btn.textContent = btnLabel; btn.disabled = false; }
+    refreshSaveButtons();
   }
+}
+function refreshSaveButtons() {
+  const u = document.getElementById('btnUpdate');
+  const n = document.getElementById('btnSaveNew');
+  const has = !!S.saveKey;
+  if (u) { u.style.display = has ? '' : 'none'; u.title = has ? ('Overwrite ' + (S.client.ref || 'this quote')) : ''; }
+  if (n) n.textContent = has ? '💾 Save New' : '💾 Save';
 }
 async function openSaveLoad() {
   const list = document.getElementById('savedList');
@@ -1969,6 +2047,7 @@ async function openSaveLoad() {
           return '<div class="save-item">' +
             '<div class="save-item-main" onclick="loadQuote(\'' + q.key + '\')">' +
             '<div class="save-item-name">' + q.name + (q.ref ? ' · ' + q.ref : '') + '</div>' +
+            '<div class="save-item-meta">' + (quoteServiceLabel(q.payload) || 'No services selected') + '</div>' +
             '<div class="save-item-meta">' + (q.address || '—') + ' · ' + q.date + '</div></div>' +
             '<div class="save-item-total">$' + Math.round(q.total).toLocaleString() + '</div>' +
             '<button class="save-item-del" onclick="deleteQuote(\'' + q.key + '\', \'' + (q.name||'').replace(/'/g,"\\'") + '\')">🗑</button></div>';
@@ -1981,6 +2060,7 @@ async function openSaveLoad() {
           return '<div class="save-item">' +
             '<div class="save-item-main" onclick="loadQuoteLocal(\'' + s.key + '\')">' +
             '<div class="save-item-name">' + s.name + (s.ref ? ' · ' + s.ref : '') + '</div>' +
+            '<div class="save-item-meta">' + (quoteServiceLabel(localStorage.getItem(s.key)) || 'No services selected') + '</div>' +
             '<div class="save-item-meta">' + (s.address || '—') + ' · ' + s.date + ' (local)</div></div>' +
             '<div class="save-item-total">$' + Math.round(s.total).toLocaleString() + '</div>' +
             '<button class="save-item-del" onclick="deleteQuoteLocal(\'' + s.key + '\')">🗑</button></div>';
@@ -2018,6 +2098,7 @@ async function loadQuote(key) {
     if (!quote) { alert('Quote not found.'); closeSaveLoad(); return; }
     const payload = typeof quote.payload === 'string' ? JSON.parse(quote.payload) : quote.payload;
     restoreQuote(payload);
+    S.saveKey = key; refreshSaveButtons();
   } catch(e) { alert('Could not load quote: ' + e.message); }
   closeSaveLoad();
 }
@@ -2025,16 +2106,19 @@ function loadQuoteLocal(key) {
   const raw = localStorage.getItem(key);
   if (!raw) { alert('Quote not found.'); return; }
   restoreQuote(JSON.parse(raw));
+  S.saveKey = key; refreshSaveButtons();
   closeSaveLoad();
 }
 function restoreQuote(payload) {
   if (payload.state) {
     S = Object.assign(freshState(), payload.state);
     if (!S.overrides) S.overrides = {};
-    if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [], travelKm:0, carePromo:false };
+    if (!S.custom) S.custom = { adjustType:'none', adjustAmount:0, items: [], travelKm:0, travelDays:1, carePromo:false };
     if (S.custom.travelKm === undefined) S.custom.travelKm = 0;
+    if (!S.custom.travelDays || S.custom.travelDays < 1) S.custom.travelDays = 1;
     if (S.coatingMinOn === undefined) S.coatingMinOn = true;
     if (S.client && S.client.suburb === undefined) S.client.suburb = '';
+    if (S.saveKey === undefined) S.saveKey = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
     if (!S.coreHoles) S.coreHoles = [];
     if (!S.generalAddons) S.generalAddons = freshState().generalAddons;
@@ -2068,9 +2152,26 @@ function restoreQuote(payload) {
 function closeSaveLoad() { document.getElementById('saveModal').classList.remove('open'); }
 
 // ===== RESET =====
-function confirmReset() {
-  if (!confirm('Reset the tool and start a new quote? All unsaved data will be lost.')) return;
+function clearClient() {
+  if (!confirm('Clear all client details? Job entries will be kept.')) return;
+  const f = freshState().client;
+  S.client.first = f.first; S.client.last = f.last; S.client.phone = f.phone;
+  S.client.email = f.email; S.client.address = f.address; S.client.suburb = f.suburb;
+  if (S.custom) S.custom.travelKm = 0;
+  renderEverything();
+}
+function confirmReset(keepClient) {
+  const keep = (keepClient === undefined) ? true : keepClient;
+  if (!confirm(keep ? 'Clear all job entries and start a new quote? Client details will be kept.' : 'Reset the whole tool? All unsaved data will be lost.')) return;
+  const saved = keep ? {
+    first:S.client.first, last:S.client.last, phone:S.client.phone,
+    email:S.client.email, address:S.client.address, suburb:S.client.suburb
+  } : null;
   S = freshState();
+  if (saved) {
+    Object.keys(saved).forEach(function(k){ S.client[k] = saved[k]; });
+    if (saved.suburb) S.custom.travelKm = suburbBillableKm(saved.suburb);
+  }
   measureShapes = [];
   showPricingBreakdown = false;
   const btn = document.getElementById('pricingToggleBtn');
@@ -2093,6 +2194,7 @@ function initDates() {
 }
 function renderEverything() {
   populateSuburbs();
+  refreshSaveButtons();
   renderServices();
   renderDetails();
   renderAddons();
