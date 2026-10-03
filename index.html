@@ -140,6 +140,7 @@
   <div class="tab" data-tab="joints" onclick="showTab('joints')">📐 Joints &amp; Cuts</div>
   <div class="tab" data-tab="demo" onclick="showTab('demo')">🔨 Demo</div>
   <div class="tab" data-tab="pw" onclick="showTab('pw')">🧼 Pressure Wash</div>
+  <div class="tab" data-tab="lm" onclick="showTab('lm')">🦺 Line Marking</div>
   <div class="tab" data-tab="summary" onclick="showTab('summary')">💰 Summary</div>
   <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Clear Job</div>
 </div>
@@ -215,6 +216,14 @@
     <div class="row">
       <div class="field"><label>Large (Fist+) $90/ea</label><input type="number" data-bind="spalling.large" min="0" value="0"></div>
       <div class="field"><label>Patched Area m² @$110</label><input type="number" data-bind="spalling.area" min="0" step="0.1" value="0"></div>
+    </div>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Skim Coat <span class="badge" id="badge-skim">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:10px;margin-bottom:10px;">Thin cementitious skim over pitted, scaled or rough concrete to bring it back to a smooth, even surface.</div>
+    <div class="row">
+      <div class="field"><label>Area m² @ $<span id="skimRateLbl">20</span> (min $400)</label><input type="number" data-bind="skim.area" min="0" step="0.5" value="0"></div>
+      <div class="field"><label>Location / Note</label><input type="text" data-bind="skim.note" placeholder="e.g. Front porch"></div>
     </div>
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">Concrete Cancer Repair <span class="badge" id="badge-cancer">$0</span></div></div>
@@ -304,6 +313,15 @@
   <div class="info-box"><strong>Standalone pressure washing.</strong> One tier for the whole job. Oil stains bump the whole job to Heavy. $250 minimum on the wash.</div>
   <div class="card"><div class="card-header"><div class="card-title">🧼 Pressure Washing <span class="badge" id="badge-pw">$0</span></div></div>
   <div class="card-body" id="pwContainer"></div></div>
+  <div class="card"><div class="card-header"><div class="card-title">🔁 Pressure Clean Plan <span class="badge" id="badge-pwPlan">$0/mth</span></div></div>
+  <div class="card-body" id="pwPlanContainer"></div></div>
+  <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
+</div>
+
+<div id="tab-lm" class="section">
+  <div class="info-box"><strong>Line marking.</strong> Safety lines, walkways, hazard hatching, bays and stencils. Rates are for a new set-out; tick re-mark if you're going over an existing layout. $450 minimum.</div>
+  <div class="card"><div class="card-header"><div class="card-title">🦺 Line Marking <span class="badge" id="badge-lm">$0</span></div></div>
+  <div class="card-body" id="lmContainer"></div></div>
   <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
 </div>
 
@@ -324,6 +342,7 @@
       <div class="s-label" style="font-size:18px;">TOTAL INC GST</div>
       <div class="s-value" style="font-size:28px;" id="summaryIncGst">$0.00</div>
     </div>
+    <div id="summaryPlan"></div>
   </div></div>
 
   <div class="card"><div class="card-header"><div class="card-title">Discount / Markup</div></div>
@@ -483,9 +502,28 @@ const PRICE = {
   careNonslip: 10,
   shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 },
   cancer: { rate:1800, min:450, rebar:150 },
+  skim: 20, skimMin: 400,
   pw: { 'Basic':5, 'Standard':8, 'Heavy':15 },
   pwDesc: { 'Basic':'Plain water, no product', 'Standard':'Liquid chlorine, dwell time, no scrubbing', 'Heavy':'Degrease' },
   pwMin: 250, pwAqua: 10,
+  // Pressure Clean Plan: recurring maintenance. Per visit = area x tier rate x (1 - discount), never below pwMin. Client sees monthly (annual / 12).
+  // months = minimum commitment. Annual needs 24 months (2 visits) or it's just a discounted one off wash.
+  pwPlan: { 'Monthly':{visits:12,disc:0.25,months:12}, 'Quarterly':{visits:4,disc:0.20,months:12}, 'Six Monthly':{visits:2,disc:0.15,months:12}, 'Annual':{visits:1,disc:0.10,months:24} },
+  pwPlanUpfront: 0.05, // pay the year upfront
+  pwPlanPay: ['Client Chooses','Monthly','Yearly Upfront'],
+  // Line marking: rates are NEW SET-OUT. Re-mark over an existing layout = lmRemark x rate (lines, hatching, bays only).
+  // Market basis: Gold Coast Oct 2026 warehouse lines $4-$20/lm, bays $15-$50, accessible bay $200-$400, stencils $50-$400, removal $8-$20/lm, mobilisation $250-$800 (all inc GST).
+  lmItems: {
+    safety:     { label:'Safety / Aisle Line (up to 100mm)', unit:'lm',  Paint:9,   Epoxy:15,  remark:true },
+    walkway:    { label:'Walkway / Wide Line (150mm)',       unit:'lm',  Paint:12,  Epoxy:20,  remark:true },
+    hatch:      { label:'Hazard Hatching',                   unit:'m²',  Paint:30,  Epoxy:45,  remark:true },
+    bay:        { label:'Car Park Bay',                      unit:'bay', Paint:40,  Epoxy:90,  remark:true },
+    accessible: { label:'Accessible Bay with Symbol',        unit:'bay', Paint:290, Epoxy:400, remark:true },
+    stencil:    { label:'Stencil (arrow, number, letter)',   unit:'each',Paint:120, Epoxy:150, remark:false },
+    custom:     { label:'Custom Symbol / Logo Stencil',      unit:'each',Paint:250, Epoxy:300, remark:false },
+    removal:    { label:'Old Line Removal (grind off)',      unit:'lm',  Paint:14,  Epoxy:14,  remark:false }
+  },
+  lmRemark: 0.75, lmMin: 450,
   waste: { 'Light':0.39, 'Medium':0.86, 'Heavy':1.57 },
   wasteRun: 150
 };
@@ -506,10 +544,13 @@ function freshState() {
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
+    skim: { area:0, note:'' },
     joints: [], softCuts: [], siliconeJoints: [], polyJoints: [], coreHoles: [],
     ramps: [],
     cancerPatches: [], cancerRebarLm: 0,
     pwZones: [], pwJob: { tier:'Standard', oil:false, aqua:false },
+    pwPlan: { enabled:false, area:0, freq:'Six Monthly', tier:'Standard', reward:true, pay:'Client Chooses', showQuote:false, showInvoice:false },
+    lmLines: [], lmJob: { material:'Epoxy', remark:false },
     waste: { enabled:false, m2:0, tier:'Medium', runFee:true, runs:1 },
     demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, kitchenArea:0, cabinetryLm:0 },
     pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
@@ -557,7 +598,7 @@ function syncBoundInputs() {
   });
 }
 
-const NAV = ['client','measure','services','repairs','details','addons','joints','demo','pw','summary'];
+const NAV = ['client','measure','services','repairs','details','addons','joints','demo','pw','lm','summary'];
 let currentTab = 'client';
 function showTab(name) {
   currentTab = name;
@@ -571,7 +612,8 @@ function showTab(name) {
   if (name === 'details') { renderDetails(); syncBoundInputs(); }
   if (name === 'addons') renderAddons();
   if (name === 'measure') populateMeasureDest();
-  if (name === 'pw') renderPw();
+  if (name === 'pw') { renderPw(); renderPwPlan(); }
+  if (name === 'lm') renderLm();
   if (name === 'repairs') renderCancer();
   calcAll();
   window.scrollTo(0,0);
@@ -1218,6 +1260,160 @@ function pwSection() {
   return { key:'pw', category:'🧼 Pressure Washing', zoneName:'', desc:c.tier + ' tier (' + PRICE.pwDesc[c.tier].toLowerCase() + ')' + (S.pwJob.oil ? ', oil stains' : '') + ' · ' + c.area + 'm²', addons:add, subtotal:c.total };
 }
 
+// ===== PRESSURE CLEAN PLAN =====
+// First clean = normal pressure wash quote at full rate. Plan visits after that get the tier discount.
+// Sign up bonus: the first plan visit gets DOUBLE the tier discount, credited off that bill. Never below pwMin a visit.
+function r2(n) { return Math.round(n * 100) / 100; }
+function pwPlanCalc() {
+  const p = S.pwPlan || freshState().pwPlan;
+  const f = PRICE.pwPlan[p.freq] || PRICE.pwPlan['Six Monthly'];
+  const rate = PRICE.pw[p.tier] || PRICE.pw['Standard'];
+  const area = parseFloat(p.area) || 0;
+  const full = area * rate;
+  const byArea = full * (1 - f.disc);
+  const perVisit = area > 0 ? Math.max(byArea, PRICE.pwMin) : 0;
+  const rewardVisit = area > 0 ? Math.max(full * (1 - 2 * f.disc), PRICE.pwMin) : 0;
+  const credit = (p.reward && area > 0) ? Math.max(0, perVisit - rewardVisit) : 0;
+  const annual = perVisit * f.visits;
+  const monthly = r2(annual / 12);
+  const upfront = r2(annual * (1 - PRICE.pwPlanUpfront));
+  const minVisits = Math.round(f.visits * f.months / 12);
+  return { on: !!p.enabled && area > 0, area:area, freq:p.freq, tier:p.tier, rate:rate, disc:f.disc, visits:f.visits,
+    full:full, byArea:byArea, perVisit:perVisit, minApplied: area > 0 && byArea < PRICE.pwMin,
+    reward: !!p.reward, rewardDisc: 2 * f.disc, rewardVisit:rewardVisit, credit:credit,
+    annual:annual, monthly:monthly, monthlyInc: r2(annual * 1.1 / 12),
+    upfront:upfront, upfrontInc: r2(annual * (1 - PRICE.pwPlanUpfront) * 1.1),
+    minMonths:f.months, minVisits:minVisits, termValue: perVisit * minVisits - credit };
+}
+function setPwPlanFreq(i, v) { S.pwPlan.freq = v; renderPwPlan(); calcAll(); }
+function setPwPlanPay(i, v) { S.pwPlan.pay = v; renderPwPlan(); calcAll(); }
+function setPwPlanTier(i, v) { S.pwPlan.tier = v; renderPwPlan(); calcAll(); }
+function pwPlanUseWashArea() { S.pwPlan.area = pwCalc().area; renderPwPlan(); calcAll(); }
+function pwPlanToggle(key, label) {
+  return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price"></div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (S.pwPlan[key]?'checked':'') + ' onchange="S.pwPlan.' + key + '=this.checked;calcAll()"><span class="toggle-slider"></span></label></div>';
+}
+function renderPwPlan() {
+  const c = document.getElementById('pwPlanContainer');
+  if (!c) return;
+  const p = S.pwPlan;
+  const washArea = pwCalc().area;
+  const f = PRICE.pwPlan[p.freq];
+  let h = '<div class="info-box" style="font-size:10px;margin-bottom:10px;">Recurring maintenance for clients who pass on the clean and seal. First clean is quoted above at full rate. Visit 2 gets double the tier discount, visit 3 onwards gets the tier discount. Never below $' + PRICE.pwMin + ' a visit.</div>' +
+    '<div class="toggle-row"><div class="toggle-label">Offer Plan On This Quote</div><div class="toggle-price"></div>' +
+    '<label class="toggle-switch"><input type="checkbox" id="pwPlanOn" ' + (p.enabled?'checked':'') + ' onchange="S.pwPlan.enabled=this.checked;renderPwPlan();populateMeasureDest();calcAll()"><span class="toggle-slider"></span></label></div>';
+  if (p.enabled) {
+    h += '<div class="field"><label>Frequency</label>' + pills(Object.keys(PRICE.pwPlan), p.freq, 'setPwPlanFreq', 0) + '</div>' +
+      '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + f.visits + ' visit' + (f.visits>1?'s':'') + ' a year · ' + Math.round(f.disc*100) + '% off · minimum ' + f.months + ' months (' + Math.round(f.visits*f.months/12) + ' visits)</div>' +
+      '<div class="field"><label>Tier</label>' + pills(Object.keys(PRICE.pw), p.tier, 'setPwPlanTier', 0) + '</div>' +
+      '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + PRICE.pwDesc[p.tier] + ' · $' + PRICE.pw[p.tier] + '/m²' + (p.tier==='Basic' ? ' · <strong>Basic only if the client asks for no product</strong>' : '') + '</div>' +
+      '<div class="field"><label>Plan Area (m²)</label><input type="number" data-bind="pwPlan.area" step="0.5" min="0"></div>' +
+      (washArea > 0 ? '<button class="btn-add" onclick="pwPlanUseWashArea()">Use wash area (' + washArea + 'm²)</button>' : '') +
+      '<div class="field"><label>Payment</label>' + pills(PRICE.pwPlanPay, p.pay || 'Client Chooses', 'setPwPlanPay', 0) + '</div>' +
+      pwPlanToggle('reward', 'Sign up bonus: visit 2 at ' + Math.round(f.disc*200) + '% off') +
+      '<div id="pwPlanFigures"></div><hr class="divider">' +
+      pwPlanToggle('showQuote', 'Show per visit &amp; annual on quote') +
+      pwPlanToggle('showInvoice', 'Show per visit &amp; annual on invoice');
+  }
+  c.innerHTML = h;
+  syncBoundInputs();
+  updatePwPlanFigures();
+}
+function pwPlanFiguresHTML(c) {
+  const row = function(l, v, strong){ return '<div class="zone-total-line"><div class="zt-label">' + l + '</div><div class="zt-value"' + (strong?'':' style="font-size:13px;color:var(--muted);"') + '>' + v + '</div></div>'; };
+  return row('Per Visit (' + c.visits + ' a year)', fmt(c.perVisit) + (c.minApplied ? ' (min)' : '')) +
+    (c.reward ? row('Visit 2 Bonus (' + Math.round(c.rewardDisc*100) + '% off)', fmt(c.rewardVisit) + (c.credit > 0 ? ' · credit ' + fmt(c.credit) : ' · at floor, no credit')) : '') +
+    row('Annual', fmt(c.annual)) +
+    row('Client Pays Monthly (ex GST)', fmt(c.monthly), true) +
+    row('Monthly inc GST', fmt(c.monthlyInc)) +
+    row('Pay Yearly Upfront (ex GST, ' + Math.round(PRICE.pwPlanUpfront*100) + '% off)', fmt(c.upfront)) +
+    row('Yearly Upfront inc GST', fmt(c.upfrontInc)) +
+    row('Minimum Term (' + c.minMonths + ' mths, ' + c.minVisits + ' visits)', fmt(c.termValue));
+}
+function updatePwPlanFigures() {
+  const c = pwPlanCalc();
+  const el = document.getElementById('pwPlanFigures');
+  if (el) el.innerHTML = c.area > 0 ? pwPlanFiguresHTML(c) : '<div class="text-muted" style="font-size:11px;">Enter the plan area to see pricing.</div>';
+  const b = document.getElementById('badge-pwPlan');
+  if (b) b.textContent = fmt(c.on ? c.monthly : 0) + '/mth';
+  const sp = document.getElementById('summaryPlan');
+  if (sp) sp.innerHTML = c.on ? '<div class="info-box" style="font-size:11px;margin-top:10px;"><strong>🔁 Pressure Clean Plan</strong> (recurring, not in the total above) · ' + c.freq + ' · ' + c.tier + ' · ' + c.area + 'm²</div>' + pwPlanFiguresHTML(c) : '';
+}
+function pwPlanDocHTML(withBreakdown) {
+  const c = pwPlanCalc();
+  if (!c.on) return '';
+  const freqTxt = { 'Monthly':'a maintenance clean every month', 'Quarterly':'four maintenance cleans a year, one every three months', 'Six Monthly':'two maintenance cleans a year, one every six months', 'Annual':'a maintenance clean every year' }[c.freq] || '';
+  const pay = (S.pwPlan && S.pwPlan.pay) || 'Client Chooses';
+  const save = Math.round(PRICE.pwPlanUpfront*100);
+  let rows = '';
+  if (pay === 'Monthly') rows = '<div class="payment-row due"><div>Plan Price, Paid Monthly (Inc GST)</div><div class="p-amount">' + fmt(c.monthlyInc) + ' per month</div></div>';
+  else if (pay === 'Yearly Upfront') rows = '<div class="payment-row due"><div>Plan Price, Paid Yearly Upfront with ' + save + '% Saving (Inc GST)</div><div class="p-amount">' + fmt(c.upfrontInc) + ' per year</div></div>';
+  else rows = '<div class="payment-row due"><div>Pay Monthly (Inc GST)</div><div class="p-amount">' + fmt(c.monthlyInc) + ' per month</div></div>' +
+    '<div class="payment-row"><div>Or Pay Yearly Upfront and Save ' + save + '% (Inc GST)</div><div class="p-amount">' + fmt(c.upfrontInc) + ' per year</div></div>';
+  if (withBreakdown) rows += '<div class="payment-row"><div>Per Visit (Ex GST), ' + c.visits + ' visit' + (c.visits>1?'s':'') + ' a year</div><div class="p-amount">' + fmt(c.perVisit) + '</div></div>' +
+    '<div class="payment-row"><div>Annual (Ex GST)</div><div class="p-amount">' + fmt(c.annual) + '</div></div>';
+  if (c.credit > 0) rows += '<div class="payment-row"><div><strong>Sign Up Bonus:</strong> your second visit is ' + Math.round(c.rewardDisc*100) + '% off, credited to that visit\'s bill</div><div class="p-amount">' + fmt(c.credit * 1.1) + ' off</div></div>';
+  rows += '<div class="payment-row"><div>Minimum Commitment</div><div class="p-amount">' + c.minMonths + ' months (' + c.minVisits + ' visits)</div></div>';
+  return '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Poxit Pressure Clean Plan: ' + c.freq + '</div>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-bottom:8px;">Keep your ' + c.area + 'm² looking freshly cleaned all year round with ' + freqTxt + ', booked in for you so you never have to think about it.</p>' +
+    rows +
+    '<p style="font-size:10.5px;line-height:1.6;color:#555;margin-top:8px;">The plan covers routine maintenance cleaning. Your first visit is charged at full price as quoted above. If a surface has built up substantial dirt or staining between visits, an additional charge may apply on the day where deemed necessary, and we will always let you know before any extra work goes ahead. Full terms are set out in the Poxit Pressure Clean Plan Agreement.</p></div>';
+}
+
+// ===== LINE MARKING =====
+function lmRate(type) {
+  const it = PRICE.lmItems[type];
+  if (!it) return 0;
+  const base = it[S.lmJob.material] || 0;
+  return (S.lmJob.remark && it.remark) ? Math.round(base * PRICE.lmRemark * 100) / 100 : base;
+}
+function lmCalc() {
+  let byItems = 0;
+  S.lmLines.forEach(function(l){ byItems += (parseFloat(l.qty)||0) * lmRate(l.type); });
+  const total = byItems > 0 ? Math.max(byItems, PRICE.lmMin) : 0;
+  return { byItems:byItems, total:total, minApplied: byItems > 0 && byItems < PRICE.lmMin };
+}
+function setLmMaterial(i, v) { S.lmJob.material = v; renderLm(); calcAll(); }
+function addLmLine(type) { S.lmLines.push({ type:type || 'safety', name:'', qty:0 }); renderLm(); calcAll(); }
+function rmLmLine(i) { S.lmLines.splice(i,1); renderLm(); calcAll(); }
+function setLmType(i, v) { S.lmLines[i].type = v; renderLm(); calcAll(); }
+function renderLm() {
+  const c = document.getElementById('lmContainer');
+  if (!c) return;
+  const j = S.lmJob;
+  let h = '<div class="field"><label>Material (whole job)</label>' + pills(['Paint','Epoxy'], j.material, 'setLmMaterial', 0) + '</div>' +
+    '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + (j.material === 'Epoxy' ? 'Two pack epoxy line paint. Forklift and heavy traffic rated, right choice on coated or epoxy floors.' : 'Line marking paint. Cheaper, faster, wears quicker under forklifts.') + '</div>' +
+    '<div class="toggle-row"><div class="toggle-label">Re-mark Existing Layout</div><div class="toggle-price">' + Math.round((1-PRICE.lmRemark)*100) + '% off lines, hatching, bays</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (j.remark?'checked':'') + ' onchange="S.lmJob.remark=this.checked;renderLm();calcAll()"><span class="toggle-slider"></span></label></div>';
+  const keys = Object.keys(PRICE.lmItems);
+  S.lmLines.forEach(function(l, i) {
+    const it = PRICE.lmItems[l.type] || PRICE.lmItems.safety;
+    h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Item ' + (i+1) + '</div><button class="btn-remove" onclick="rmLmLine(' + i + ')">✕</button></div>' +
+      '<div class="field"><label>Type</label><select onchange="setLmType(' + i + ',this.value)">' +
+        keys.map(function(k){ return '<option value="' + k + '"' + (k===l.type?' selected':'') + '>' + PRICE.lmItems[k].label + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="row"><div class="field"><label>Location / Note</label><input type="text" data-bind="lmLines.' + i + '.name" placeholder="e.g. Racking aisle 3"></div>' +
+      '<div class="field"><label>Qty (' + it.unit + ') @ $' + lmRate(l.type) + '</label><input type="number" data-bind="lmLines.' + i + '.qty" step="0.5" min="0"></div></div></div>';
+  });
+  h += '<button class="btn-add" onclick="addLmLine()">＋ Add Line Marking Item</button>' +
+    '<div class="zone-total-line"><div class="zt-label">Line Marking Total</div><div class="zt-value" id="lmTotal">$0</div></div>';
+  c.innerHTML = h;
+  syncBoundInputs();
+}
+function lmSection() {
+  const c = lmCalc();
+  if (c.total <= 0) return null;
+  const add = [];
+  S.lmLines.forEach(function(l, i) {
+    const q = parseFloat(l.qty) || 0;
+    if (!(q > 0)) return;
+    const it = PRICE.lmItems[l.type];
+    add.push({ label:it.label + (l.name ? ' (' + l.name + ')' : '') + ' — ' + q + ' ' + it.unit + ' @ $' + lmRate(l.type) + '/' + it.unit, price:q * lmRate(l.type) });
+  });
+  if (c.minApplied) add.push({ label:'Minimum callout top-up ($' + PRICE.lmMin + ' min)', price:c.total - c.byItems });
+  return { key:'lm', category:'🦺 Line Marking', zoneName:'', desc:S.lmJob.material + ' line marking' + (S.lmJob.remark ? ', re-mark over existing layout' : ', new set-out'), addons:add, subtotal:c.total };
+}
+
 // ===== WASTE DISPOSAL (GRINDING) =====
 function jobGrindArea() {
   let a = 0;
@@ -1342,8 +1538,10 @@ function populateMeasureDest() {
   });
   S.pwZones.forEach(function(z,i){ o += '<option value="pwZones.' + i + '.area">🧼 Pressure Wash — ' + (z.name||'Area '+(i+1)) + '</option>'; });
   o += '<option value="NEW:pw">🧼 Pressure Wash — ＋ ' + (S.pwZones.length ? 'another' : 'new') + ' area</option>';
+  if (S.pwPlan && S.pwPlan.enabled) o += '<option value="pwPlan.area">🔁 Pressure Clean Plan — Area</option>';
   if (S.waste.enabled) o += '<option value="waste.m2">🚛 Waste Disposal — Ground Area</option>';
   if (S.services['epoxy'] || S.spalling) o += '<option value="spalling.area">🔧 Spalling — Patched Area</option>';
+  o += '<option value="skim.area">🔧 Skim Coat — Area</option>';
   o += '<option value="demo.carpet">🔨 Demo — Carpet Removal</option>';
   o += '<option value="demo.laminate">🔨 Demo — Laminate Removal</option>';
   o += '<option value="demo.vinyl">🔨 Demo — Glued Vinyl Removal</option>';
@@ -1367,6 +1565,7 @@ function sendMeasureTo() {
   setPath(S, dest, parseFloat(total.toFixed(2)));
   renderDetails();
   renderPw();
+  renderPwPlan();
   renderAddons();
   populateMeasureDest();
   syncBoundInputs();
@@ -1493,6 +1692,13 @@ function buildSections() {
     if (sp.area>0) sa.push({label:'Patched Area ' + sp.area + 'm²', price:sp.area*PRICE.spall.area});
     sections.push({ key:'spalling', category:'🔧 Spalling Repair', zoneName:'', desc:'', addons:sa, subtotal:spSub });
   }
+  const skA = (S.skim && parseFloat(S.skim.area)) || 0;
+  if (skA > 0) {
+    const skBy = skA * PRICE.skim, skTot = Math.max(skBy, PRICE.skimMin);
+    const skAdd = [{ label:'Skim coat ' + skA + 'm² @ $' + PRICE.skim + '/m²', price:skBy }];
+    if (skTot > skBy) skAdd.push({ label:'Minimum callout top-up ($' + PRICE.skimMin + ' min)', price:skTot - skBy });
+    sections.push({ key:'skim', category:'🔧 Skim Coat', zoneName:'', desc:'Thin cementitious skim to restore a smooth, even surface' + (S.skim.note ? ' (' + S.skim.note + ')' : ''), addons:skAdd, subtotal:skTot });
+  }
   let jSub = 0; const jAdd = [];
   S.joints.forEach(function(j,i) {
     if (!j.lm) return;
@@ -1564,6 +1770,7 @@ function buildSections() {
   if (dSub > 0) sections.push({ key:'demo', category:'🔨 Demolition & Strip-Out', zoneName:'', desc:'', addons:dAdd, subtotal:dSub });
   wasteSections().forEach(function(s){ sections.push(s); });
   const pwSec = pwSection(); if (pwSec) sections.push(pwSec);
+  const lmSec = lmSection(); if (lmSec) sections.push(lmSec);
   const gaList = generalAddonsList();
   if (gaList.length > 0) {
     const gaSub = gaList.reduce(function(s,x){ return s + x.price; }, 0);
@@ -1660,6 +1867,8 @@ function calcAll() {
   badge('badge-shine', sumKeys('shine-'));
   badge('badge-crack', sumKeys('cracks'));
   badge('badge-spalling', sumKeys('spalling'));
+  badge('badge-skim', sumKeys('skim'));
+  (function(){ const e = document.getElementById('skimRateLbl'); if (e) e.textContent = PRICE.skim; })();
   badge('badge-joints', sumKeys('joints'));
   badge('badge-softcuts', sumKeys('softcuts'));
   badge('badge-silJoints', sumKeys('silJoints'));
@@ -1668,8 +1877,11 @@ function calcAll() {
   badge('badge-ramping', sumKeys('ramping'));
   badge('badge-cancer', cancerCalc().total);
   badge('badge-pw', pwCalc().total);
+  badge('badge-lm', lmCalc().total);
+  (function(){ const e = document.getElementById('lmTotal'); if (e) e.textContent = fmt(lmCalc().total); })();
   badge('badge-waste', sumKeys('waste'));
   (function(){ const e = document.getElementById('pwTotal'); if (e) e.textContent = fmt(pwCalc().total); })();
+  updatePwPlanFigures();
   updateCancerAreas();
   badge('badge-pwUpsell', sumKeys('pwUpsell'));
   badge('badge-roofWash', sumKeys('roofWash'));
@@ -1867,6 +2079,7 @@ function generatePDF() {
     '<div class="disclaimer">This price is based on visible and reasonably assessable conditions at the time of quoting only. Price does not account for hidden subsurface conditions, scope changes, or variations.</div>' +
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Payment Terms</span></div>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;">All quotes are valid for <strong>30 days</strong> from the date of issue. A <strong>50% non-refundable deposit</strong> is required to confirm booking and reserve the job date. Remaining 50% is due on <strong>completion of work before Poxit leaves the site</strong>.</p>' +
+    pwPlanDocHTML(S.pwPlan && S.pwPlan.showQuote) +
     (c.clientNotes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
     (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
     '</div>' + docFooter() +
@@ -1927,6 +2140,7 @@ function generateInvoice() {
     '<div class="payment-row due"><div>Total Amount Due</div><div class="p-amount">' + fmt(incGst) + '</div></div></div>' +
     '<div id="terms-paid" class="payment-box" style="display:none;"><div class="payment-title" style="color:#4caf6e;">✓ Paid in Full</div>' +
     '<div class="payment-row"><div>Total Amount Paid</div><div class="p-amount" style="color:#4caf6e;">' + fmt(incGst) + '</div></div></div>' +
+    pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
     '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>Poxit Flooring</strong><br>BSB: <strong>067 873</strong>&nbsp;&nbsp;&nbsp;Account: <strong>17789072</strong><br>Reference: <strong>' + invRef + '</strong></div>' +
     '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ABN: 11 743 009 073</div>' +
     '</div>' + docFooter() +
@@ -1943,6 +2157,9 @@ function quoteServiceLabel(payload) {
     if (st && st.state) {
       const ex = st.state;
       if (ex.pwJob && ex.pwZones && ex.pwZones.length) names.push('Pressure Washing');
+      if (ex.pwPlan && ex.pwPlan.enabled && ex.pwPlan.area > 0) names.push('Pressure Clean Plan');
+      if (ex.lmLines && ex.lmLines.length) names.push('Line Marking');
+      if (ex.skim && ex.skim.area > 0) names.push('Skim Coat');
       if (ex.cancerPatches && ex.cancerPatches.length) names.push('Concrete Cancer');
       if (ex.demo && Object.keys(ex.demo).some(function(k){ return ex.demo[k] > 0; })) names.push('Demolition');
     }
@@ -2127,6 +2344,13 @@ function restoreQuote(payload) {
     if (S.cancerRebarLm === undefined) S.cancerRebarLm = 0;
     if (!S.pwZones) S.pwZones = [];
     if (!S.pwJob) S.pwJob = freshState().pwJob;
+    if (!S.pwPlan) S.pwPlan = freshState().pwPlan;
+    if (S.pwPlan.reward === undefined) S.pwPlan.reward = true;
+    if (PRICE.pwPlanPay.indexOf(S.pwPlan.pay) < 0) S.pwPlan.pay = 'Client Chooses';
+    if (!PRICE.pwPlan[S.pwPlan.freq]) S.pwPlan.freq = 'Six Monthly';
+    if (!S.skim) S.skim = freshState().skim;
+    if (!S.lmLines) S.lmLines = [];
+    if (!S.lmJob) S.lmJob = freshState().lmJob;
     if (!S.waste) S.waste = freshState().waste;
     S.sealZones.forEach(function(z){ if (z.regrout === undefined) { z.regrout=false; z.regroutSurface='porcelain'; z.regroutOption='overtop'; z.regroutM2=0; } });
     measureShapes = payload.measureShapes || [];
@@ -2207,6 +2431,8 @@ function renderEverything() {
   renderRamps();
   renderCancer();
   renderPw();
+  renderPwPlan();
+  renderLm();
   renderCustomItems();
   renderMeasure();
   syncBoundInputs();
