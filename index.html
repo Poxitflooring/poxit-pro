@@ -2049,9 +2049,16 @@ function isHomeScreenApp() {
   } catch(e) {}
   return false;
 }
+function isIOS() {
+  try {
+    const ua = navigator.userAgent || '';
+    return /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  } catch(e) { return false; }
+}
+function useMadePdf() { return isHomeScreenApp() || isIOS(); }
 function openDoc(html) {
-  // Home screen app: new tabs open with no controls on iOS, so always show the doc in-page
-  if (isHomeScreenApp()) { showDocOverlay(html); return; }
+  // iPhone/iPad (app or Safari): show in-page and make a real named PDF for the share sheet
+  if (useMadePdf()) { showDocOverlay(html); return; }
   // Browser: write the document straight into a real tab (no blob URL) so iOS offers Print and saves a proper PDF
   let w = null;
   try { w = window.open('', '_blank'); } catch(e) { w = null; }
@@ -2072,7 +2079,7 @@ function showDocOverlay(html) {
   const topGap = isHomeScreenApp() ? 'max(env(safe-area-inset-top, 0px), 50px)' : 'env(safe-area-inset-top, 0px)';
   wrap.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#111;display:flex;flex-direction:column;';
   wrap.innerHTML = '<div style="display:flex;gap:8px;padding:10px;padding-top:calc(' + topGap + ' + 10px);background:#111;">' +
-    (isHomeScreenApp()
+    (useMadePdf()
       ? '<button class="btn" id="docPdfBtn" style="flex:1;" onclick="makeDocPdf()">📄 Make PDF</button>'
       : '<button class="btn" style="flex:1;" onclick="printDocOverlay()">🖨 Print / Save PDF</button>') +
     '<button class="btn" style="flex:0 0 auto;" onclick="closeDocOverlay()">✕ Close</button></div>' +
@@ -2114,7 +2121,9 @@ function pdfBlobFrom(frame) {
       jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
       pagebreak: { mode:['css','legacy'], avoid:['tr','.payment-box','.bank-box'] }
     };
-    return h2p().set(opt).from(doc.body).outputPdf('blob').then(function(b) {
+    // Rebuild the settings inside the frame so its own code recognises the arrays
+    const frameOpt = win.JSON.parse(JSON.stringify(opt));
+    return h2p().set(frameOpt).from(doc.body).outputPdf('blob').then(function(b) {
       if (st.parentNode) st.parentNode.removeChild(st);
       return b;
     }, function(err) {
