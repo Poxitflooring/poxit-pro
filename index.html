@@ -2043,10 +2043,36 @@ function scopeRowsHTML(sections, withPrices) {
   }).join('<tr class="spacer-row"><td colspan="2"></td></tr>');
 }
 function openDoc(html) {
-  const blob = new Blob([html], { type:'text/html' });
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if (!w) window.location.href = url;
+  // Write the document straight into a real tab (no blob URL) so iOS offers Print and saves a proper PDF
+  let w = null;
+  try { w = window.open('', '_blank'); } catch(e) { w = null; }
+  if (w) {
+    try { w.document.open(); w.document.write(html); w.document.close(); return; } catch(e) {}
+    try { w.close(); } catch(e) {}
+  }
+  showDocOverlay(html);
+}
+function showDocOverlay(html) {
+  // Fallback when a new tab is blocked (e.g. some home screen app modes): show the doc in-page with its own Print button
+  closeDocOverlay();
+  const quiet = html.replace('window.onload = function(){ window.print(); };', '');
+  const wrap = document.createElement('div');
+  wrap.id = 'docOverlay';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);';
+  wrap.innerHTML = '<div style="display:flex;gap:8px;padding:10px;background:#111;">' +
+    '<button class="btn" style="flex:1;" onclick="printDocOverlay()">🖨 Print / Save PDF</button>' +
+    '<button class="btn" style="flex:0 0 auto;" onclick="closeDocOverlay()">✕ Close</button></div>' +
+    '<iframe id="docOverlayFrame" style="flex:1;border:0;width:100%;background:#fff;"></iframe>';
+  document.body.appendChild(wrap);
+  document.getElementById('docOverlayFrame').srcdoc = quiet;
+}
+function printDocOverlay() {
+  const f = document.getElementById('docOverlayFrame');
+  try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e) { window.print(); }
+}
+function closeDocOverlay() {
+  const o = document.getElementById('docOverlay');
+  if (o) o.remove();
 }
 function generatePDF() {
   const c = S.client;
