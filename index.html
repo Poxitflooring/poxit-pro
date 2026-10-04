@@ -2042,8 +2042,17 @@ function scopeRowsHTML(sections, withPrices) {
       '<td class="price-col zone-price">' + fmt(effSub(sec)) + '</td></tr>' + addonRows;
   }).join('<tr class="spacer-row"><td colspan="2"></td></tr>');
 }
+function isHomeScreenApp() {
+  try {
+    if (window.navigator.standalone === true) return true;
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+  } catch(e) {}
+  return false;
+}
 function openDoc(html) {
-  // Write the document straight into a real tab (no blob URL) so iOS offers Print and saves a proper PDF
+  // Home screen app: new tabs open with no controls on iOS, so always show the doc in-page
+  if (isHomeScreenApp()) { showDocOverlay(html); return; }
+  // Browser: write the document straight into a real tab (no blob URL) so iOS offers Print and saves a proper PDF
   let w = null;
   try { w = window.open('', '_blank'); } catch(e) { w = null; }
   if (w) {
@@ -2058,8 +2067,9 @@ function showDocOverlay(html) {
   const quiet = html.replace('window.onload = function(){ window.print(); };', '');
   const wrap = document.createElement('div');
   wrap.id = 'docOverlay';
-  wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);';
-  wrap.innerHTML = '<div style="display:flex;gap:8px;padding:10px;background:#111;">' +
+  const topGap = isHomeScreenApp() ? 'max(env(safe-area-inset-top, 0px), 50px)' : 'env(safe-area-inset-top, 0px)';
+  wrap.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#111;display:flex;flex-direction:column;';
+  wrap.innerHTML = '<div style="display:flex;gap:8px;padding:10px;padding-top:calc(' + topGap + ' + 10px);background:#111;">' +
     '<button class="btn" style="flex:1;" onclick="printDocOverlay()">🖨 Print / Save PDF</button>' +
     '<button class="btn" style="flex:0 0 auto;" onclick="closeDocOverlay()">✕ Close</button></div>' +
     '<iframe id="docOverlayFrame" style="flex:1;border:0;width:100%;background:#fff;"></iframe>';
@@ -2068,7 +2078,10 @@ function showDocOverlay(html) {
 }
 function printDocOverlay() {
   const f = document.getElementById('docOverlayFrame');
+  const t = document.title;
+  try { const dt = f.contentDocument && f.contentDocument.title; if (dt) document.title = dt; } catch(e) {}
   try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e) { window.print(); }
+  setTimeout(function(){ document.title = t; }, 1500);
 }
 function closeDocOverlay() {
   const o = document.getElementById('docOverlay');
