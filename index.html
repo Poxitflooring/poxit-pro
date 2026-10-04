@@ -2065,12 +2065,16 @@ function showDocOverlay(html) {
   // Fallback when a new tab is blocked (e.g. some home screen app modes): show the doc in-page with its own Print button
   closeDocOverlay();
   const quiet = html.replace('window.onload = function(){ window.print(); };', '');
+  const tm = html.match(/<title>([^<]*)<\/title>/i);
+  window.__docTitle = tm ? tm[1] : '';
   const wrap = document.createElement('div');
   wrap.id = 'docOverlay';
   const topGap = isHomeScreenApp() ? 'max(env(safe-area-inset-top, 0px), 50px)' : 'env(safe-area-inset-top, 0px)';
   wrap.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#111;display:flex;flex-direction:column;';
   wrap.innerHTML = '<div style="display:flex;gap:8px;padding:10px;padding-top:calc(' + topGap + ' + 10px);background:#111;">' +
-    '<button class="btn" style="flex:1;" onclick="printDocOverlay()">🖨 Print / Save PDF</button>' +
+    (isHomeScreenApp()
+      ? '<button class="btn" id="docPdfBtn" style="flex:1;" onclick="makeDocPdf()">📄 Make PDF</button>'
+      : '<button class="btn" style="flex:1;" onclick="printDocOverlay()">🖨 Print / Save PDF</button>') +
     '<button class="btn" style="flex:0 0 auto;" onclick="closeDocOverlay()">✕ Close</button></div>' +
     '<iframe id="docOverlayFrame" style="flex:1;border:0;width:100%;background:#fff;"></iframe>';
   document.body.appendChild(wrap);
@@ -2083,7 +2087,83 @@ function printDocOverlay() {
   try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e) { window.print(); }
   setTimeout(function(){ document.title = t; }, 1500);
 }
+// ===== Real PDF file for the iPhone home screen app (print is blocked there) =====
+const PDF_LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+window.__docPdf = null;
+function loadPdfLib(win) {
+  return new Promise(function(resolve, reject) {
+    if (win.html2pdf) return resolve(win.html2pdf);
+    const sc = win.document.createElement('script');
+    sc.src = PDF_LIB_URL;
+    sc.onload = function(){ win.html2pdf ? resolve(win.html2pdf) : reject(new Error('PDF maker did not load')); };
+    sc.onerror = function(){ reject(new Error('Could not load the PDF maker. Check your internet and try again.')); };
+    win.document.head.appendChild(sc);
+  });
+}
+function pdfBlobFrom(frame) {
+  const win = frame.contentWindow, doc = frame.contentDocument;
+  return loadPdfLib(win).then(function(h2p) {
+    const st = doc.createElement('style');
+    st.id = 'pdfCaptureCss';
+    st.textContent = '.terms-select{display:none !important;} body{max-width:100% !important;}';
+    doc.head.appendChild(st);
+    const opt = {
+      margin: [8, 8, 10, 8],
+      image: { type:'jpeg', quality:0.95 },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode:['css','legacy'], avoid:['tr','.payment-box','.bank-box'] }
+    };
+    return h2p().set(opt).from(doc.body).outputPdf('blob').then(function(b) {
+      if (st.parentNode) st.parentNode.removeChild(st);
+      return b;
+    }, function(err) {
+      if (st.parentNode) st.parentNode.removeChild(st);
+      throw err;
+    });
+  });
+}
+function docPdfName() {
+  let t = window.__docTitle || '';
+  t = t.replace(/[\/\\:*?"<>|]/g, '').trim() || 'Poxit Document';
+  return t + '.pdf';
+}
+function makeDocPdf() {
+  const btn = document.getElementById('docPdfBtn');
+  const f = document.getElementById('docOverlayFrame');
+  if (!btn || !f) return Promise.resolve();
+  btn.disabled = true; btn.textContent = '⏳ Making PDF...';
+  return pdfBlobFrom(f).then(function(blob) {
+    const name = docPdfName();
+    window.__docPdf = (typeof File === 'function')
+      ? new File([blob], name, { type:'application/pdf' })
+      : Object.assign(blob, { name:name });
+    btn.disabled = false; btn.textContent = '📤 Share PDF';
+    btn.onclick = shareDocPdf;
+  }).catch(function(e) {
+    btn.disabled = false; btn.textContent = '📄 Make PDF';
+    alert('PDF failed: ' + (e && e.message ? e.message : e));
+  });
+}
+function shareDocPdf() {
+  const file = window.__docPdf;
+  if (!file) return Promise.resolve();
+  const data = { files:[file], title:file.name };
+  if (navigator.canShare && navigator.share && navigator.canShare(data)) {
+    return navigator.share(data).catch(function(e) {
+      if (e && e.name === 'AbortError') return; // closed the share sheet
+      alert('Share failed: ' + (e && e.message ? e.message : e));
+    });
+  }
+  // No share sheet available: download the file instead
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  return Promise.resolve();
+}
 function closeDocOverlay() {
+  window.__docPdf = null;
   const o = document.getElementById('docOverlay');
   if (o) o.remove();
 }
