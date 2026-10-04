@@ -344,6 +344,7 @@
       <div class="s-value" style="font-size:28px;" id="summaryIncGst">$0.00</div>
     </div>
     <div id="summaryPlan"></div>
+    <div id="summaryDocName"></div>
   </div></div>
 
   <div class="card"><div class="card-header"><div class="card-title">Discount / Markup</div></div>
@@ -542,6 +543,7 @@ function freshState() {
   return {
     client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
+    docService: '',
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
@@ -1923,6 +1925,7 @@ function calcAll() {
 function renderSummary(sections, customItems, adjustment) {
   const div = document.getElementById('summaryLines');
   if (!div) return;
+  renderDocName();
   if (sections.length === 0 && customItems === 0) {
     div.innerHTML = '<div class="text-muted" style="font-size:13px;padding:10px 0;">No items added yet.</div>';
     return;
@@ -2149,7 +2152,7 @@ function generateInvoice() {
   openDoc(html);
 }
 // ===== SAVE / LOAD / DELETE =====
-function quoteServiceLabel(payload) {
+function quoteServiceNames(payload) {
   try {
     const st = (typeof payload === 'string' ? JSON.parse(payload) : payload);
     const sv = (st && st.state && st.state.services) || {};
@@ -2164,16 +2167,35 @@ function quoteServiceLabel(payload) {
       if (ex.cancerPatches && ex.cancerPatches.length) names.push('Concrete Cancer');
       if (ex.demo && Object.keys(ex.demo).some(function(k){ return ex.demo[k] > 0; })) names.push('Demolition');
     }
-    if (!names.length) return '';
-    return names.length > 3 ? names.slice(0,3).join(' + ') + ' +' + (names.length-3) : names.join(' + ');
-  } catch(e) { return ''; }
+    return names;
+  } catch(e) { return []; }
+}
+function quoteServiceLabel(payload) {
+  const names = quoteServiceNames(payload);
+  if (!names.length) return '';
+  return names.length > 3 ? names.slice(0,3).join(' + ') + ' +' + (names.length-3) : names.join(' + ');
 }
 const DOC_SHORT = { 'Epoxy Flooring':'Epoxy', 'Cleaning & Sealing':'Clean and Seal', 'Grind & Seal':'Grind and Seal', 'Concrete Grinding':'Grinding', 'Polished Concrete':'Polished Concrete', 'Care Plan Refresh':'Care Plan', 'Clean Grip & Shine':'Grip and Shine', 'Pressure Clean Plan':'Clean Plan', 'Concrete Cancer':'Concrete Repair' };
 function docJobLabel() {
-  const lbl = quoteServiceLabel({ state:S });
-  if (!lbl) return '';
-  const parts = lbl.split(' + ').map(function(n){ return DOC_SHORT[n] || n; });
-  return parts.length > 2 ? parts.slice(0,2).join(' + ') + ' + More' : parts.join(' + ');
+  const names = quoteServiceNames({ state:S });
+  if (!names.length) return '';
+  const pick = names.indexOf(S.docService) > -1 ? S.docService : names[0];
+  return DOC_SHORT[pick] || pick;
+}
+function setDocService(v) { S.docService = v; renderDocName(); }
+function renderDocName() {
+  const el = document.getElementById('summaryDocName');
+  if (!el) return;
+  const names = quoteServiceNames({ state:S });
+  if (!names.length) { el.innerHTML = ''; return; }
+  const pick = names.indexOf(S.docService) > -1 ? S.docService : names[0];
+  const sel = names.length > 1
+    ? '<div class="field" style="margin-bottom:6px;"><label>Service in PDF name</label><select onchange="setDocService(this.value)">' +
+      names.map(function(n){ return '<option value="' + n + '"' + (n === pick ? ' selected' : '') + '>' + n + '</option>'; }).join('') +
+      '</select></div>'
+    : '';
+  el.innerHTML = '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);">' + sel +
+    '<div class="text-muted" style="font-size:11px;">PDF name: <strong>' + docFileName('Quote', S.client.ref) + '</strong></div></div>';
 }
 function docAreaLabel() {
   const a = (S.client.area || '').trim();
@@ -2362,6 +2384,7 @@ function restoreQuote(payload) {
     if (S.coatingMinOn === undefined) S.coatingMinOn = true;
     if (S.client && S.client.suburb === undefined) S.client.suburb = '';
     if (S.client && S.client.area === undefined) S.client.area = '';
+    if (S.docService === undefined) S.docService = '';
     if (S.saveKey === undefined) S.saveKey = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
     if (!S.coreHoles) S.coreHoles = [];
