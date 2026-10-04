@@ -158,6 +158,7 @@
     <div class="field"><label>Email</label><input type="text" data-bind="client.email" placeholder="john@email.com"></div>
     <div class="field"><label>Street Address</label><input type="text" data-bind="client.address" placeholder="123 Example St"></div>
     <div class="field"><label>Suburb</label><select id="suburbSel" data-bind="client.suburb" onchange="onSuburbChange()"><option value="">Select suburb…</option></select><div id="suburbNote" class="info-box" style="font-size:11px;margin-top:6px;">Pick a suburb to auto-apply travel.</div></div>
+    <div class="field"><label>Job Area</label><input type="text" data-bind="client.area" placeholder="e.g. Garage"><div class="info-box" style="font-size:11px;margin-top:6px;">Used in the saved PDF name. Leave blank to use the first zone name.</div></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
     <div class="field"><label>Quote Reference #</label><input type="text" data-bind="client.ref" placeholder="Assigned automatically when you hit Save"></div>
@@ -539,7 +540,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
@@ -2059,7 +2060,7 @@ function generatePDF() {
   });
   if (adjustment !== 0) rows += '<tr class="zone-row"><td><span class="zone-cat">' + (adjustment<0?'Discount':'Markup') + '</span></td><td class="price-col zone-price">' + (adjustment<0?'-':'+') + fmt(Math.abs(adjustment)) + '</td></tr>';
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
-    '<title>Poxit Quote — ' + (c.ref || client) + '</title><style>' + docCSS() + '</style></head><body>' +
+    '<title>' + docFileName('Quote', c.ref) + '</title><style>' + docCSS() + '</style></head><body>' +
     docHeader('QUOTE / SCOPE OF WORKS') +
     '<div class="doc-body"><div class="client-box">' +
     '<div class="client-row"><div class="client-label">Client Full Name:</div><div class="client-value">' + client + '</div></div>' +
@@ -2105,7 +2106,7 @@ function generateInvoice() {
     if (ci.price > 0) rows += '<tr class="zone-row"><td><span class="zone-cat">✏️ ' + (ci.desc || 'Custom Item') + '</span></td><td class="price-col zone-price">' + fmt(ci.price) + '</td></tr>';
   });
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
-    '<title>Poxit Invoice — ' + invRef + '</title><style>' + docCSS() + '</style></head><body>' +
+    '<title>' + docFileName('Invoice', invRef) + '</title><style>' + docCSS() + '</style></head><body>' +
     docHeader('TAX INVOICE') +
     '<div class="doc-body"><div class="inv-badge">TAX INVOICE · ' + invRef + '</div>' +
     '<div class="client-box">' +
@@ -2166,6 +2167,31 @@ function quoteServiceLabel(payload) {
     if (!names.length) return '';
     return names.length > 3 ? names.slice(0,3).join(' + ') + ' +' + (names.length-3) : names.join(' + ');
   } catch(e) { return ''; }
+}
+const DOC_SHORT = { 'Epoxy Flooring':'Epoxy', 'Cleaning & Sealing':'Clean and Seal', 'Grind & Seal':'Grind and Seal', 'Concrete Grinding':'Grinding', 'Polished Concrete':'Polished Concrete', 'Care Plan Refresh':'Care Plan', 'Clean Grip & Shine':'Grip and Shine', 'Pressure Clean Plan':'Clean Plan', 'Concrete Cancer':'Concrete Repair' };
+function docJobLabel() {
+  const lbl = quoteServiceLabel({ state:S });
+  if (!lbl) return '';
+  const parts = lbl.split(' + ').map(function(n){ return DOC_SHORT[n] || n; });
+  return parts.length > 2 ? parts.slice(0,2).join(' + ') + ' + More' : parts.join(' + ');
+}
+function docAreaLabel() {
+  const a = (S.client.area || '').trim();
+  if (a) return a;
+  const arrs = ['epoxyZones','tintedZones','sealZones','gsZones','grindZones','polishedZones','careZones','shineZones','aquaZones'];
+  for (let i = 0; i < arrs.length; i++) {
+    const z = (S[arrs[i]] || []).find(function(x){ return x && x.name && x.name.trim(); });
+    if (z) return z.name.trim();
+  }
+  return '';
+}
+function docFileName(kind, ref) {
+  const c = S.client;
+  const job = docJobLabel();
+  const parts = [ (c.first + ' ' + c.last).trim(), docAreaLabel(), (job ? job + ' ' : '') + kind, ref || '' ]
+    .map(function(x){ return String(x).replace(/[\/\\:*?"<>|]/g,'').replace(/\s+/g,' ').trim(); })
+    .filter(Boolean);
+  return parts.join(' - ');
 }
 function stampNow() {
   const d = new Date();
@@ -2335,6 +2361,7 @@ function restoreQuote(payload) {
     if (!S.custom.travelDays || S.custom.travelDays < 1) S.custom.travelDays = 1;
     if (S.coatingMinOn === undefined) S.coatingMinOn = true;
     if (S.client && S.client.suburb === undefined) S.client.suburb = '';
+    if (S.client && S.client.area === undefined) S.client.area = '';
     if (S.saveKey === undefined) S.saveKey = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
     if (!S.coreHoles) S.coreHoles = [];
