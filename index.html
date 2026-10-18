@@ -1977,6 +1977,7 @@ function docCSS() {
   ".logo-sub{font-family:'Montserrat',sans-serif;font-size:11px;font-weight:600;color:#fff;letter-spacing:5px;margin-top:2px;}" +
   ".doc-type-gold{font-family:'Montserrat',sans-serif;font-size:10px;font-weight:700;color:#0ABAB5;letter-spacing:3px;text-transform:uppercase;margin-top:10px;}" +
   ".doc-type-white{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:#fff;letter-spacing:2px;text-transform:uppercase;margin-top:4px;}" +
+  ".doc-company{font-family:'Open Sans',sans-serif;font-size:10px;color:#bbb;letter-spacing:0.5px;margin-top:10px;}" +
   ".gold-rule{height:4px;background:#0ABAB5;}" +
   ".doc-body{padding:28px 40px;}" +
   ".inv-badge{display:inline-block;background:#0ABAB5;color:white;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:2px;padding:4px 12px;border-radius:4px;margin-bottom:16px;}" +
@@ -2022,12 +2023,34 @@ function docCSS() {
   ".doc-footer{margin-top:28px;padding:12px 40px;border-top:1px solid #e0e0e0;text-align:center;font-size:10px;color:#aaa;line-height:1.8;}" +
   "@media print{.terms-select{display:none !important;}body{max-width:100%;}.doc-body{padding:20px 30px;}}";
 }
+// ===== COMPANY DETAILS: the one place to change business identity on every document =====
+const COMPANY = {
+  legalName:   'Poxit Flooring Pty Ltd',
+  tradingName: 'Poxit Flooring',
+  abn:         '23 702 727 535',
+  acn:         '702 727 535',
+  gstRegistered: true,
+  office:      '1/12 Dorretti Circuit, Upper Coomera QLD 4209',
+  director:    'Dominic Amsteins',
+  directorTitle: 'Director',
+  phone:       '0478 495 995',
+  email:       'poxitflooring@gmail.com',
+  web:         'www.poxitflooring.com.au',
+  bankAccountName: 'Poxit Flooring Pty Ltd',
+  bankBSB:     '067 873',
+  bankAccount: '26553862'
+};
+function companyIdLine() {
+  return COMPANY.legalName + '&nbsp;&nbsp;|&nbsp;&nbsp;ABN ' + COMPANY.abn + '&nbsp;&nbsp;|&nbsp;&nbsp;ACN ' + COMPANY.acn;
+}
+function companyBankReady() { return !!(COMPANY.bankBSB && COMPANY.bankAccount); }
 function docHeader(docType) {
   return '<div class="doc-header"><div class="logo-main">POXIT</div><div class="logo-sub">FLOORING</div>' +
-    '<div class="doc-type-gold">CONCRETE REPAIR &amp; COATING SPECIALISTS</div><div class="doc-type-white">' + docType + '</div></div><div class="gold-rule"></div>';
+    '<div class="doc-type-gold">CONCRETE REPAIR &amp; COATING SPECIALISTS</div><div class="doc-type-white">' + docType + '</div>' +
+    '<div class="doc-company">' + companyIdLine() + '</div></div><div class="gold-rule"></div>';
 }
 function docFooter() {
-  return '<div class="doc-footer"><span>Poxit Flooring</span> · <span>Concrete Repair &amp; Coating Specialists</span> · <span>poxitflooring@gmail.com</span> · <span>0478 495 995</span> · <span>Gold Coast, QLD</span> · <span>ABN 11 743 009 073</span></div>';
+  return '<div class="doc-footer"><span>' + COMPANY.legalName + '</span> · <span>ABN ' + COMPANY.abn + '</span> · <span>ACN ' + COMPANY.acn + '</span> · <span>' + COMPANY.office + '</span> · <span>' + COMPANY.phone + '</span> · <span>' + COMPANY.email + '</span> · <span>' + COMPANY.web + '</span></div>';
 }
 function scopeRowsHTML(sections, withPrices) {
   return sections.map(function(sec) {
@@ -2132,6 +2155,13 @@ function pdfBlobFrom(frame) {
     });
   });
 }
+function onDocTermsChanged(title) {
+  if (title) window.__docTitle = title;
+  // A PDF made before the stage changed is out of date: go back to Make PDF
+  window.__docPdf = null;
+  const btn = document.getElementById('docPdfBtn');
+  if (btn) { btn.disabled = false; btn.textContent = '📄 Make PDF'; btn.onclick = makeDocPdf; }
+}
 function docPdfName() {
   let t = window.__docTitle || '';
   t = t.replace(/[\/\\:*?"<>|]/g, '').trim() || 'Poxit Document';
@@ -2219,12 +2249,14 @@ function generatePDF() {
   openDoc(html);
 }
 function generateInvoice() {
+  if (!companyBankReady()) alert('Heads up: the company BSB and account number are not set yet, so this invoice will show [FILL IN] in the bank details. Do not send it to a client.');
   const c = S.client;
   const client = (c.first + ' ' + c.last).trim() || '—';
   const invNum = (parseInt(localStorage.getItem('poxit_inv_num') || '0') + 1);
   localStorage.setItem('poxit_inv_num', invNum);
   const today = new Date();
   const invRef = 'INV-' + today.getFullYear() + '-' + ('00' + invNum).slice(-3);
+  const invTitles = invoiceStageTitles(invRef);
   const dueDate = new Date(today); dueDate.setDate(dueDate.getDate() + 7);
   const sections = buildSections();
   let base = 0; sections.forEach(function(s){ base += effSub(s); });
@@ -2237,7 +2269,7 @@ function generateInvoice() {
     if (ci.price > 0) rows += '<tr class="zone-row"><td><span class="zone-cat">✏️ ' + (ci.desc || 'Custom Item') + '</span></td><td class="price-col zone-price">' + fmt(ci.price) + '</td></tr>';
   });
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
-    '<title>' + docFileName('Invoice', invRef) + '</title><style>' + docCSS() + '</style></head><body>' +
+    '<title>' + invTitles.deposit + '</title><style>' + docCSS() + '</style></head><body>' +
     docHeader('TAX INVOICE') +
     '<div class="doc-body"><div class="inv-badge">TAX INVOICE · ' + invRef + '</div>' +
     '<div class="client-box">' +
@@ -2273,10 +2305,10 @@ function generateInvoice() {
     '<div id="terms-paid" class="payment-box" style="display:none;"><div class="payment-title" style="color:#4caf6e;">✓ Paid in Full</div>' +
     '<div class="payment-row"><div>Total Amount Paid</div><div class="p-amount" style="color:#4caf6e;">' + fmt(incGst) + '</div></div></div>' +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
-    '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>Poxit Flooring</strong><br>BSB: <strong>067 873</strong>&nbsp;&nbsp;&nbsp;Account: <strong>17789072</strong><br>Reference: <strong>' + invRef + '</strong></div>' +
-    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ABN: 11 743 009 073</div>' +
+    '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + COMPANY.bankAccountName + '</strong><br>BSB: <strong>' + (COMPANY.bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (COMPANY.bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invRef + '</strong></div>' +
+    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + COMPANY.legalName + ' ABN ' + COMPANY.abn + '</div>' +
     '</div>' + docFooter() +
-    '<scr' + 'ipt>function setTerms(type, btn) { document.querySelectorAll(".terms-btn").forEach(function(b){b.classList.remove("active");}); btn.classList.add("active"); ["deposit","final","full","paid"].forEach(function(t){ document.getElementById("terms-"+t).style.display = t===type?"block":"none"; }); } window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
+    '<scr' + 'ipt>var INV_TITLES = ' + JSON.stringify(invTitles).replace(/</g, '\\u003c') + '; function setTerms(type, btn) { document.querySelectorAll(".terms-btn").forEach(function(b){b.classList.remove("active");}); btn.classList.add("active"); ["deposit","final","full","paid"].forEach(function(t){ document.getElementById("terms-"+t).style.display = t===type?"block":"none"; }); if (INV_TITLES[type]) document.title = INV_TITLES[type]; try { if (window.parent && window.parent !== window && window.parent.onDocTermsChanged) window.parent.onDocTermsChanged(document.title); } catch(e) {} } window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
   openDoc(html);
 }
 // ===== SAVE / LOAD / DELETE =====
@@ -2335,6 +2367,13 @@ function docAreaLabel() {
   }
   return '';
 }
+// Invoice file names say which payment stage they are for, so deposit and final invoices never share a name
+const INVOICE_STAGE = { deposit:'Deposit Invoice', final:'Final Invoice', full:'Full Payment Invoice', paid:'Paid Invoice' };
+function invoiceStageTitles(ref) {
+  const o = {};
+  Object.keys(INVOICE_STAGE).forEach(function(k){ o[k] = docFileName(INVOICE_STAGE[k], ref); });
+  return o;
+}
 function docFileName(kind, ref) {
   const c = S.client;
   const job = docJobLabel();
@@ -2388,6 +2427,7 @@ async function saveQuote(mode) {
     S.client.ref = 'PXT-' + today.getFullYear() + '-' + ('00' + num).slice(-3);
     S.saveKey = 'PXT-' + Date.now();
   }
+  stampQuoteDates();
   syncBoundInputs();
   const name = (S.client.first + ' ' + S.client.last).trim() || 'Unnamed Quote';
   const total = calcAll();
@@ -2584,12 +2624,16 @@ function confirmReset(keepClient) {
   renderEverything();
   showTab('client');
 }
-function initDates() {
+function stampQuoteDates() {
+  // Quote date is always the day it was last saved or updated; validity runs 30 days from then
   const today = new Date();
   function f(d) { return d.toLocaleDateString('en-AU'); }
   const valid = new Date(today); valid.setDate(valid.getDate() + 30);
   S.client.date = f(today);
   S.client.valid = f(valid);
+}
+function initDates() {
+  stampQuoteDates();
   // Ref is intentionally left blank here — it's assigned and persisted in saveQuote()
   // so it auto-increments fresh on every Save (handles sending revisions cleanly).
   S.client.ref = '';
