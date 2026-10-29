@@ -158,6 +158,7 @@
     <div class="field"><label>Email</label><input type="text" data-bind="client.email" placeholder="john@email.com"></div>
     <div class="field"><label>Street Address</label><input type="text" data-bind="client.address" placeholder="123 Example St"></div>
     <div class="field"><label>Suburb</label><select id="suburbSel" data-bind="client.suburb" onchange="onSuburbChange()"><option value="">Select suburb…</option></select><div id="suburbNote" class="info-box" style="font-size:11px;margin-top:6px;">Pick a suburb to auto-apply travel.</div></div>
+    <div class="field"><label>Location <span style="color:var(--red);">*</span></label><select id="locationSel" data-bind="client.location" onchange="onLocationChange()"><option value="">Select location…</option><option value="Internal">Internal</option><option value="External">External</option><option value="Both">Both</option></select><div id="locationNote" class="info-box" style="font-size:11px;margin-top:6px;">Required. External and Both jobs are weather dependent.</div></div>
     <div class="field"><label>Job Area</label><input type="text" data-bind="client.area" placeholder="e.g. Garage"><div class="info-box" style="font-size:11px;margin-top:6px;">Used in the saved PDF name. Leave blank to use the first zone name.</div></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
@@ -541,7 +542,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     docService: '',
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
@@ -2382,6 +2383,24 @@ function docFileName(kind, ref) {
     .filter(Boolean);
   return parts.join(' - ');
 }
+const LOCATIONS = ['Internal','External','Both'];
+function quoteLocation(payload) {
+  try {
+    const st = (typeof payload === 'string' ? JSON.parse(payload) : payload);
+    const v = st && st.state && st.state.client && st.state.client.location;
+    return LOCATIONS.indexOf(v) > -1 ? v : '';
+  } catch(e) { return ''; }
+}
+function locationBadge(loc) {
+  if (loc === 'Internal') return '🏠 Internal';
+  if (loc === 'External') return '🌦 External';
+  if (loc === 'Both') return '🏠🌦 Both';
+  return '📍 Location not set';
+}
+function onLocationChange() {
+  const sel = document.getElementById('locationSel');
+  if (sel) sel.style.borderColor = '';
+}
 function stampNow() {
   const d = new Date();
   return d.toLocaleDateString('en-AU') + ' ' + d.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit' });
@@ -2406,6 +2425,14 @@ async function findDuplicateQuote(name, total) {
 }
 async function saveQuote(mode) {
   mode = mode || 'new';
+  syncBoundInputs();
+  if (LOCATIONS.indexOf(S.client.location) < 0) {
+    alert('Pick a Location (Internal, External or Both) on the Client Details card before saving.');
+    showTab('client');
+    const sel = document.getElementById('locationSel');
+    if (sel) { sel.style.borderColor = 'var(--red)'; try { sel.focus(); } catch(e) {} }
+    return;
+  }
   const isUpdate = (mode === 'update' && S.saveKey);
   if (!isUpdate) {
     syncBoundInputs();
@@ -2441,7 +2468,7 @@ async function saveQuote(mode) {
     if (isUpdate) {
       try { await fetch(SHEET_URL + '?action=delete&key=' + encodeURIComponent(key)); } catch(e) {}
     }
-    const params = new URLSearchParams({ action:'save', key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref, payload: JSON.stringify(payload) });
+    const params = new URLSearchParams({ action:'save', key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref, location:S.client.location, payload: JSON.stringify(payload) });
     const res = await fetch(SHEET_URL + '?' + params.toString());
     const data = await res.json();
     if (data.status === 'saved') alert(isUpdate ? ('♻️ Quote updated: ' + S.client.ref) : ('✅ Quote saved: ' + name + ' (' + S.client.ref + ')'));
@@ -2449,7 +2476,7 @@ async function saveQuote(mode) {
   } catch(e) {
     localStorage.setItem(key, JSON.stringify(payload));
     const saves = JSON.parse(localStorage.getItem('poxit_saves') || '[]');
-    const row = { key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref };
+    const row = { key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref, location:S.client.location };
     const at = saves.findIndex(function(x){ return x.key === key; });
     if (at > -1) saves[at] = row; else saves.push(row);
     localStorage.setItem('poxit_saves', JSON.stringify(saves));
@@ -2480,7 +2507,7 @@ async function openSaveLoad() {
           return '<div class="save-item">' +
             '<div class="save-item-main" onclick="loadQuote(\'' + q.key + '\')">' +
             '<div class="save-item-name">' + q.name + (q.ref ? ' · ' + q.ref : '') + '</div>' +
-            '<div class="save-item-meta">' + (quoteServiceLabel(q.payload) || 'No services selected') + '</div>' +
+            '<div class="save-item-meta">' + (quoteServiceLabel(q.payload) || 'No services selected') + ' · ' + locationBadge(quoteLocation(q.payload)) + '</div>' +
             '<div class="save-item-meta">' + (q.address || '—') + ' · ' + q.date + '</div></div>' +
             '<div class="save-item-total">$' + Math.round(q.total).toLocaleString() + '</div>' +
             '<button class="save-item-del" onclick="deleteQuote(\'' + q.key + '\', \'' + (q.name||'').replace(/'/g,"\\'") + '\')">🗑</button></div>';
@@ -2493,7 +2520,7 @@ async function openSaveLoad() {
           return '<div class="save-item">' +
             '<div class="save-item-main" onclick="loadQuoteLocal(\'' + s.key + '\')">' +
             '<div class="save-item-name">' + s.name + (s.ref ? ' · ' + s.ref : '') + '</div>' +
-            '<div class="save-item-meta">' + (quoteServiceLabel(localStorage.getItem(s.key)) || 'No services selected') + '</div>' +
+            '<div class="save-item-meta">' + (quoteServiceLabel(localStorage.getItem(s.key)) || 'No services selected') + ' · ' + locationBadge(quoteLocation(localStorage.getItem(s.key))) + '</div>' +
             '<div class="save-item-meta">' + (s.address || '—') + ' · ' + s.date + ' (local)</div></div>' +
             '<div class="save-item-total">$' + Math.round(s.total).toLocaleString() + '</div>' +
             '<button class="save-item-del" onclick="deleteQuoteLocal(\'' + s.key + '\')">🗑</button></div>';
@@ -2552,6 +2579,7 @@ function restoreQuote(payload) {
     if (S.coatingMinOn === undefined) S.coatingMinOn = true;
     if (S.client && S.client.suburb === undefined) S.client.suburb = '';
     if (S.client && S.client.area === undefined) S.client.area = '';
+    if (S.client && LOCATIONS.indexOf(S.client.location) < 0) S.client.location = '';
     if (S.docService === undefined) S.docService = '';
     if (S.saveKey === undefined) S.saveKey = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
@@ -2599,6 +2627,7 @@ function clearClient() {
   const f = freshState().client;
   S.client.first = f.first; S.client.last = f.last; S.client.phone = f.phone;
   S.client.email = f.email; S.client.address = f.address; S.client.suburb = f.suburb;
+  S.client.location = f.location;
   if (S.custom) S.custom.travelKm = 0;
   renderEverything();
 }
@@ -2607,7 +2636,7 @@ function confirmReset(keepClient) {
   if (!confirm(keep ? 'Clear all job entries and start a new quote? Client details will be kept.' : 'Reset the whole tool? All unsaved data will be lost.')) return;
   const saved = keep ? {
     first:S.client.first, last:S.client.last, phone:S.client.phone,
-    email:S.client.email, address:S.client.address, suburb:S.client.suburb
+    email:S.client.email, address:S.client.address, suburb:S.client.suburb, location:S.client.location
   } : null;
   S = freshState();
   if (saved) {
