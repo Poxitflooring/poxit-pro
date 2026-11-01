@@ -159,6 +159,7 @@
     <div class="field"><label>Street Address</label><input type="text" data-bind="client.address" placeholder="123 Example St"></div>
     <div class="field"><label>Suburb</label><select id="suburbSel" data-bind="client.suburb" onchange="onSuburbChange()"><option value="">Select suburb…</option></select><div id="suburbNote" class="info-box" style="font-size:11px;margin-top:6px;">Pick a suburb to auto-apply travel.</div></div>
     <div class="field"><label>Location <span style="color:var(--red);">*</span></label><select id="locationSel" data-bind="client.location" onchange="onLocationChange()"><option value="">Select location…</option><option value="Internal">Internal</option><option value="External">External</option><option value="Both">Both</option></select><div id="locationNote" class="info-box" style="font-size:11px;margin-top:6px;">Required. External and Both jobs are weather dependent.</div></div>
+    <div class="field"><label>Business Entity</label><select id="entitySel" data-bind="client.entity"><option value="Company">Poxit Flooring Pty Ltd (company)</option><option value="Sole Trader">Poxit Flooring (sole trader)</option></select><div class="info-box" style="font-size:11px;margin-top:6px;">Sets the ABN and bank account on the quote and invoices. Quotes first saved before 15 Oct 2026 stay on the sole trader details.</div></div>
     <div class="field"><label>Job Area</label><input type="text" data-bind="client.area" placeholder="e.g. Garage"><div class="info-box" style="font-size:11px;margin-top:6px;">Used in the saved PDF name. Leave blank to use the first zone name.</div></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
     <div class="field"><label>Quote Valid Until</label><input type="text" data-bind="client.valid"></div>
@@ -542,7 +543,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     docService: '',
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
@@ -2041,17 +2042,44 @@ const COMPANY = {
   bankBSB:     '067 873',
   bankAccount: '26553862'
 };
-function companyIdLine() {
-  return COMPANY.legalName + '&nbsp;&nbsp;|&nbsp;&nbsp;ABN ' + COMPANY.abn + '&nbsp;&nbsp;|&nbsp;&nbsp;ACN ' + COMPANY.acn;
+// Jobs first saved before the company changeover stay on the sole trader details
+const SOLE_TRADER = {
+  legalName:   'Poxit Flooring',
+  tradingName: 'Poxit Flooring',
+  abn:         '11 743 009 073',
+  acn:         '',
+  gstRegistered: true,
+  office:      'Gold Coast, QLD',
+  director:    'Dominic Amsteins',
+  directorTitle: 'Sole Trader',
+  phone:       '0478 495 995',
+  email:       'poxitflooring@gmail.com',
+  web:         'www.poxitflooring.com.au',
+  bankAccountName: 'Poxit Flooring',
+  bankBSB:     '067 873',
+  bankAccount: '17789072'
+};
+const ENTITIES = { 'Company': COMPANY, 'Sole Trader': SOLE_TRADER };
+const ENTITY_CHANGEOVER_MS = Date.UTC(2026, 9, 14, 14, 0, 0); // 15 Oct 2026, 00:00 Brisbane
+function entityForKey(key) {
+  const m = String(key || '').match(/^PXT-(\d{12,})$/);
+  if (!m) return 'Company';
+  return parseInt(m[1], 10) < ENTITY_CHANGEOVER_MS ? 'Sole Trader' : 'Company';
 }
-function companyBankReady() { return !!(COMPANY.bankBSB && COMPANY.bankAccount); }
+function docEntity() { return ENTITIES[S.client && S.client.entity] || COMPANY; }
+function companyIdLine() {
+  const E = docEntity();
+  return E.legalName + '&nbsp;&nbsp;|&nbsp;&nbsp;ABN ' + E.abn + (E.acn ? '&nbsp;&nbsp;|&nbsp;&nbsp;ACN ' + E.acn : '');
+}
+function companyBankReady() { const E = docEntity(); return !!(E.bankBSB && E.bankAccount); }
 function docHeader(docType) {
   return '<div class="doc-header"><div class="logo-main">POXIT</div><div class="logo-sub">FLOORING</div>' +
     '<div class="doc-type-gold">CONCRETE REPAIR &amp; COATING SPECIALISTS</div><div class="doc-type-white">' + docType + '</div>' +
     '<div class="doc-company">' + companyIdLine() + '</div></div><div class="gold-rule"></div>';
 }
 function docFooter() {
-  return '<div class="doc-footer"><span>' + COMPANY.legalName + '</span> · <span>ABN ' + COMPANY.abn + '</span> · <span>ACN ' + COMPANY.acn + '</span> · <span>' + COMPANY.office + '</span> · <span>' + COMPANY.phone + '</span> · <span>' + COMPANY.email + '</span> · <span>' + COMPANY.web + '</span></div>';
+  const E = docEntity();
+  return '<div class="doc-footer"><span>' + E.legalName + '</span> · <span>ABN ' + E.abn + '</span>' + (E.acn ? ' · <span>ACN ' + E.acn + '</span>' : '') + ' · <span>' + E.office + '</span> · <span>' + E.phone + '</span> · <span>' + E.email + '</span> · <span>' + E.web + '</span></div>';
 }
 function scopeRowsHTML(sections, withPrices) {
   return sections.map(function(sec) {
@@ -2156,8 +2184,13 @@ function pdfBlobFrom(frame) {
     });
   });
 }
-function onDocTermsChanged(title) {
+function onDocTermsChanged(title, stage) {
   if (title) window.__docTitle = title;
+  // keep the Drive copy in step with the payment stage picked on the invoice
+  if (stage && invoiceCtx) {
+    clearTimeout(onDocTermsChanged._t);
+    onDocTermsChanged._t = setTimeout(function(){ window.__invoiceDriveSave = autoSaveInvoice(stage); }, 1500);
+  }
   // A PDF made before the stage changed is out of date: go back to Make PDF
   window.__docPdf = null;
   const btn = document.getElementById('docPdfBtn');
@@ -2248,15 +2281,22 @@ function generatePDF() {
     '</div>' + docFooter() +
     '<scr' + 'ipt>window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
   openDoc(html);
+  window.__quoteDriveSave = autoSaveDoc('Quote', html, {});
 }
 function generateInvoice() {
   if (!companyBankReady()) alert('Heads up: the company BSB and account number are not set yet, so this invoice will show [FILL IN] in the bank details. Do not send it to a client.');
+  // Open the tab now, while the tap still counts, then fill it once the number arrives
+  let tab = null;
+  if (!useMadePdf()) {
+    try { tab = window.open('', '_blank'); if (tab) tab.document.write('<p style="font-family:sans-serif;padding:24px;">Preparing invoice…</p>'); } catch(e) { tab = null; }
+  }
+  window.__invoiceDone = nextInvoiceRef().then(function(r) { return buildInvoice(r.ref, tab); });
+  return window.__invoiceDone;
+}
+function buildInvoice(invRef, tab) {
   const c = S.client;
   const client = (c.first + ' ' + c.last).trim() || '—';
-  const invNum = (parseInt(localStorage.getItem('poxit_inv_num') || '0') + 1);
-  localStorage.setItem('poxit_inv_num', invNum);
   const today = new Date();
-  const invRef = 'INV-' + today.getFullYear() + '-' + ('00' + invNum).slice(-3);
   const invTitles = invoiceStageTitles(invRef);
   const dueDate = new Date(today); dueDate.setDate(dueDate.getDate() + 7);
   const sections = buildSections();
@@ -2306,11 +2346,19 @@ function generateInvoice() {
     '<div id="terms-paid" class="payment-box" style="display:none;"><div class="payment-title" style="color:#4caf6e;">✓ Paid in Full</div>' +
     '<div class="payment-row"><div>Total Amount Paid</div><div class="p-amount" style="color:#4caf6e;">' + fmt(incGst) + '</div></div></div>' +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
-    '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + COMPANY.bankAccountName + '</strong><br>BSB: <strong>' + (COMPANY.bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (COMPANY.bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invRef + '</strong></div>' +
-    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + COMPANY.legalName + ' ABN ' + COMPANY.abn + '</div>' +
+    '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invRef + '</strong></div>' +
+    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
     '</div>' + docFooter() +
-    '<scr' + 'ipt>var INV_TITLES = ' + JSON.stringify(invTitles).replace(/</g, '\\u003c') + '; function setTerms(type, btn) { document.querySelectorAll(".terms-btn").forEach(function(b){b.classList.remove("active");}); btn.classList.add("active"); ["deposit","final","full","paid"].forEach(function(t){ document.getElementById("terms-"+t).style.display = t===type?"block":"none"; }); if (INV_TITLES[type]) document.title = INV_TITLES[type]; try { if (window.parent && window.parent !== window && window.parent.onDocTermsChanged) window.parent.onDocTermsChanged(document.title); } catch(e) {} } window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
-  openDoc(html);
+    '<scr' + 'ipt>var INV_TITLES = ' + JSON.stringify(invTitles).replace(/</g, '\\u003c') + '; function setTerms(type, btn) { document.querySelectorAll(".terms-btn").forEach(function(b){b.classList.remove("active");}); btn.classList.add("active"); ["deposit","final","full","paid"].forEach(function(t){ document.getElementById("terms-"+t).style.display = t===type?"block":"none"; }); if (INV_TITLES[type]) document.title = INV_TITLES[type]; try { var P = (window.parent && window.parent !== window) ? window.parent : window.opener; if (P && P.onDocTermsChanged) P.onDocTermsChanged(document.title, type); } catch(e) {} } window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
+  if (tab && !tab.closed) {
+    try { tab.document.open(); tab.document.write(html); tab.document.close(); }
+    catch(e) { openDoc(html); }
+  } else {
+    openDoc(html);
+  }
+  invoiceCtx = { html: html, ref: invRef, incGst: incGst, deposit: deposit };
+  window.__invoiceDriveSave = autoSaveInvoice('deposit');
+  return invRef;
 }
 // ===== SAVE / LOAD / DELETE =====
 function quoteServiceNames(payload) {
@@ -2401,6 +2449,133 @@ function onLocationChange() {
   const sel = document.getElementById('locationSel');
   if (sel) sel.style.borderColor = '';
 }
+// ===== DRIVE SAVING + SHEET POSTS (Apps Script doPost in PoxitInvoicing.gs) =====
+function postToSheet(obj, timeoutMs) {
+  let timer = null, ctl = null;
+  try { ctl = new AbortController(); timer = setTimeout(function(){ ctl.abort(); }, timeoutMs || 20000); } catch(e) {}
+  return Promise.resolve().then(function() {
+    return fetch(SHEET_URL, { method:'POST', body: JSON.stringify(obj), signal: ctl ? ctl.signal : undefined });
+  }).then(function(r){ return r.text(); }).then(function(txt) {
+    if (timer) clearTimeout(timer);
+    let j;
+    try { j = JSON.parse(txt); } catch(e) { throw new Error('Drive saving is not switched on yet'); }
+    if (!j || j.status !== 'ok') throw new Error((j && (j.message || j.status)) || 'no reply');
+    return j;
+  }, function(e) { if (timer) clearTimeout(timer); throw (e instanceof Error ? e : new Error(String(e))); });
+}
+function driveNote(msg, bad) {
+  let el = document.getElementById('driveNote');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'driveNote';
+    el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:10000;max-width:92vw;padding:9px 14px;border-radius:8px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .3s;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = bad ? '#3a1414' : '#0d2b2a';
+  el.style.color = bad ? '#ffb4b4' : '#bff3f1';
+  el.style.border = '1px solid ' + (bad ? '#7a2a2a' : '#0ABAB5');
+  el.style.opacity = '1';
+  clearTimeout(driveNote._t);
+  driveNote._t = setTimeout(function(){ el.style.opacity = '0'; }, bad ? 6000 : 3500);
+}
+function cleanSnapText(v) {
+  return String(v || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+    .replace(/^[^A-Za-z0-9$(]+/, '').replace(/\s+/g, ' ').trim();
+}
+// Everything the sheet needs to build an invoice later without the tool
+function quoteSnapshot() {
+  const c = S.client;
+  const sections = buildSections();
+  let base = 0; sections.forEach(function(sec){ base += effSub(sec); });
+  let customItems = 0; S.custom.items.forEach(function(ci){ customItems += (ci.price||0); });
+  const adjustment = getAdjustment(base + customItems);
+  const total = base + customItems + adjustment;
+  const lines = sections.map(function(sec) {
+    return { category: cleanSnapText(sec.category), zoneName: cleanSnapText(sec.zoneName), desc: cleanSnapText(sec.desc),
+             amount: r2(effSub(sec)), addons: sec.addons.map(function(a){ return cleanSnapText(a.label); }) };
+  });
+  S.custom.items.forEach(function(ci) {
+    if (ci.price > 0) lines.push({ category: cleanSnapText(ci.desc) || 'Custom Item', zoneName:'', desc:'', amount: r2(ci.price), addons: [] });
+  });
+  return { exGst: r2(total), gst: r2(total * 0.1), incGst: r2(total * 1.1), adjustment: r2(adjustment), lines: lines,
+           ref: c.ref, service: docJobLabel(),
+           client: { name: (c.first + ' ' + c.last).replace(/\s+/g, ' ').trim(), phone: c.phone, email: c.email,
+                     address: c.address, suburb: c.suburb, area: c.area } };
+}
+function sendQuoteMeta() {
+  return postToSheet({ action:'quoteMeta', key:S.saveKey, ref:S.client.ref, entity:S.client.entity,
+                       location:S.client.location, snapshot: quoteSnapshot() })
+    .catch(function(e){ console.warn('Quote totals not sent to sheet: ' + e.message); return null; });
+}
+// Render a document to a PDF off screen (same engine as Make PDF), for Drive
+function renderPdfBlob(html) {
+  return new Promise(function(resolve, reject) {
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:1200px;border:0;pointer-events:none;';
+    f.onload = function() {
+      pdfBlobFrom(f).then(function(b){ f.remove(); resolve(b); }, function(e){ f.remove(); reject(e); });
+    };
+    document.body.appendChild(f);
+    f.srcdoc = html.replace('window.onload = function(){ window.print(); };', '');
+  });
+}
+function blobToBase64(blob) {
+  return new Promise(function(resolve, reject) {
+    const r = new FileReader();
+    r.onload = function(){ resolve(String(r.result).replace(/^data:[^,]*,/, '')); };
+    r.onerror = function(){ reject(new Error('could not read PDF')); };
+    r.readAsDataURL(blob);
+  });
+}
+function autoSaveDoc(kind, html, meta) {
+  if (!S.saveKey || !S.client.ref) {
+    driveNote('Save the quote first to keep a copy of this ' + kind.toLowerCase() + ' in Drive.', true);
+    return Promise.resolve(null);
+  }
+  const body = Object.assign({ action:'savePdf', kind: kind, key: S.saveKey, ref: S.client.ref,
+    client: (S.client.first + ' ' + S.client.last).replace(/\s+/g, ' ').trim(), entity: S.client.entity }, meta || {});
+  return renderPdfBlob(html).then(blobToBase64).then(function(b64) {
+    body.base64 = b64;
+    return postToSheet(body, 60000);
+  }).then(function(j) {
+    driveNote('☁️ ' + kind + ' saved to Drive');
+    return j;
+  }).catch(function(e) {
+    driveNote('⚠️ ' + kind + ' not saved to Drive: ' + e.message, true);
+    return null;
+  });
+}
+// One invoice counter shared with the sheet, so tool and sheet invoices never clash.
+// Offline, it falls back to this device's own counter.
+function nextInvoiceRef() {
+  const localLast = parseInt(localStorage.getItem('poxit_inv_num') || '0') || 0;
+  return postToSheet({ action:'nextInvoice', localLast: localLast }, 8000).then(function(j) {
+    localStorage.setItem('poxit_inv_num', j.number);
+    return { ref: j.ref, central: true };
+  }).catch(function() {
+    const n = localLast + 1;
+    localStorage.setItem('poxit_inv_num', n);
+    return { ref: 'INV-' + new Date().getFullYear() + '-' + ('00' + n).slice(-3), central: false };
+  });
+}
+const INVOICE_STAGE_TYPE = { deposit:'Deposit', final:'Final', full:'Full Payment', paid:'Paid' };
+let invoiceCtx = null;
+function invoiceStageHtml(html, stage) {
+  ['deposit','final','full','paid'].forEach(function(t) {
+    const re = new RegExp('<div id="terms-' + t + '" class="payment-box"( style="display:none;")?>');
+    html = html.replace(re, '<div id="terms-' + t + '" class="payment-box"' + (t === stage ? '' : ' style="display:none;"') + '>');
+  });
+  return html;
+}
+function autoSaveInvoice(stage) {
+  if (!invoiceCtx) return Promise.resolve(null);
+  const x = invoiceCtx;
+  const due = (stage === 'deposit' || stage === 'final') ? x.deposit : x.incGst;
+  return autoSaveDoc('Invoice', invoiceStageHtml(x.html, stage), {
+    invNo: x.ref, invType: INVOICE_STAGE_TYPE[stage] || 'Deposit', amountDue: r2(due), jobTotal: r2(x.incGst)
+  });
+}
 function stampNow() {
   const d = new Date();
   return d.toLocaleDateString('en-AU') + ' ' + d.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit' });
@@ -2471,6 +2646,7 @@ async function saveQuote(mode) {
     const params = new URLSearchParams({ action:'save', key:key, name:name, address:S.client.address, total:total, date:date, ref:S.client.ref, location:S.client.location, payload: JSON.stringify(payload) });
     const res = await fetch(SHEET_URL + '?' + params.toString());
     const data = await res.json();
+    if (data.status === 'saved') sendQuoteMeta();
     if (data.status === 'saved') alert(isUpdate ? ('♻️ Quote updated: ' + S.client.ref) : ('✅ Quote saved: ' + name + ' (' + S.client.ref + ')'));
     else throw new Error(data.message || 'Unknown error');
   } catch(e) {
@@ -2580,6 +2756,7 @@ function restoreQuote(payload) {
     if (S.client && S.client.suburb === undefined) S.client.suburb = '';
     if (S.client && S.client.area === undefined) S.client.area = '';
     if (S.client && LOCATIONS.indexOf(S.client.location) < 0) S.client.location = '';
+    if (S.client && !ENTITIES[S.client.entity]) S.client.entity = entityForKey(S.saveKey);
     if (S.docService === undefined) S.docService = '';
     if (S.saveKey === undefined) S.saveKey = '';
     if (S.custom.carePromo === undefined) S.custom.carePromo = false;
