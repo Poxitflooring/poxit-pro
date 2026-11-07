@@ -6,9 +6,12 @@
 //  Job Track keep working exactly as before.
 //
 //  What it does
-//   1. doPost: the quote tool sends quote totals, PDFs and invoice-number
-//      requests here. PDFs land in Drive: "Poxit Flooring/Quotes" and
-//      "Poxit Flooring/Invoices"; their Drive ID and link go back in the sheet.
+//   1. doPost: the quote tool's Export button sends the PDF here. Quotes go to
+//      the "Poxit Quotes" folder, invoices to "Poxit Invoices". A quote or
+//      invoice that is exported again updates its existing file as a new
+//      version (same file, same link), never a duplicate. The link, totals and
+//      date go back into the quote's row. The tool also sends quote totals on
+//      every Save/Update and asks here for invoice numbers.
 //   2. "Invoice Requests" tab: add a row with a quote number and a type
 //      (Deposit, Progress or Final). A 1-minute timer builds the invoice PDF,
 //      saves it to Drive and fills in the results with Status = Done.
@@ -17,7 +20,13 @@
 //
 //  This script NEVER sends email. There is no MailApp or GmailApp in it.
 //
+//  Needs the Drive service: Apps Script editor > Services > Drive API > Add.
 //  First time: run PXI_setup once from the editor (see setup steps).
+//
+//  Quote sheet (Sheet1) columns written here, after the existing A to G:
+//   H Entity | I Location | J Total ex GST | K Total inc GST | L Totals data
+//   M Quote PDF link | N Quote exported | O Last invoice no | P Last invoice link
+//   Q Invoice exported
 // =====================================================================
 
 var PXI = {
@@ -25,9 +34,9 @@ var PXI = {
   QUOTES_TAB: 'Sheet1',
   REQ_TAB: 'Invoice Requests',
   INV_TAB: 'Invoices',
-  ROOT_FOLDER: 'Poxit Flooring',
-  QUOTE_FOLDER: 'Quotes',
-  INVOICE_FOLDER: 'Invoices',
+  FILES_TAB: 'Drive Files',
+  QUOTES_FOLDER_ID: '1ws1ujtGAloblVlNBFVnz6wObCFXV1QgV',   // Poxit Quotes
+  INVOICES_FOLDER_ID: '1BQudYgl0AAJcsa-CFCoWdztGtWBARjjP', // Poxit Invoices
   TZ: 'Australia/Brisbane',
   // Quotes first saved before 15 Oct 2026 (Brisbane time) stay on the sole trader details
   CHANGEOVER_MS: Date.UTC(2026, 9, 14, 14, 0, 0),
@@ -36,7 +45,10 @@ var PXI = {
 
   // Quote sheet columns (1-based). A to G are written by the existing save code.
   Q: { KEY: 1, NAME: 2, ADDRESS: 3, TOTAL: 4, DATE: 5, REF: 6, PAYLOAD: 7,
-       ENTITY: 8, LOCATION: 9, TOTAL_INC: 10, SNAPSHOT: 11, PDF_ID: 12, PDF_LINK: 13 },
+       ENTITY: 8, LOCATION: 9, TOTAL_EX: 10, TOTAL_INC: 11, SNAPSHOT: 12,
+       QUOTE_LINK: 13, QUOTE_EXPORTED: 14, INV_NO: 15, INV_LINK: 16, INV_EXPORTED: 17 },
+  // One row per Drive file this script manages, so re-exports update the same file
+  FILES_HEADERS: ['Kind', 'Quote Key', 'Number', 'Client', 'File ID', 'Link', 'File Name', 'Updated', 'Updated (ms)'],
 
   REQ_HEADERS: ['Quote Ref', 'Client (optional)', 'Type', 'Progress Amount (inc GST)', 'Notes',
                 'Status', 'Invoice No', 'Job Total (inc GST)', 'Paid To Date', 'Amount Due (inc GST)',
@@ -82,51 +94,131 @@ function PXI_quoteMeta_(b) {
   var sh = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
   var row = PXI_findQuoteRowByKey_(sh, b.key);
   if (!row) return { status: 'not_found', message: 'No quote row with key ' + b.key };
-  var snap = b.snapshot || {};
-  sh.getRange(row, PXI.Q.ENTITY, 1, 4).setValues([[
-    PXI_cleanEntity_(b.entity) || PXI_entityForKey_(b.key),
-    PXI_clean_(b.location),
-    PXI_num_(snap.incGst),
-    JSON.stringify(snap)
-  ]]);
+  PXI_writeQuoteTotals_(sh, row, b.key, b.entity, b.location, b.snapshot || {});
+  PXI_mirrorFiles_(sh, row, b.key); // an Update re-adds the row, so put the PDF links back on it
   return { status: 'ok', row: row };
 }
 
-// Quote tool: save a quote or invoice PDF it made
+function PXI_writeQuoteTotals_(sh, row, key, entity, location, snap) {
+  sh.getRange(row, PXI.Q.ENTITY, 1, 5).setValues([[
+    PXI_cleanEntity_(entity) || PXI_entityForKey_(key),
+    PXI_clean_(location),
+    PXI_round_(PXI_num_(snap.exGst)),
+    PXI_round_(PXI_num_(snap.incGst)),
+    JSON.stringify(snap)
+  ]]);
+}
+
+// Quote tool Export button: save a quote or invoice PDF, updating it if it already exists
 function PXI_savePdf_(b) {
   if (!b.base64) return { status: 'error', message: 'No PDF data' };
   var kind = b.kind === 'Invoice' ? 'Invoice' : 'Quote';
+  if (kind === 'Invoice' && !b.invNo) return { status: 'error', message: 'Invoice number missing' };
   var bytes = Utilities.base64Decode(String(b.base64).replace(/^data:application\/pdf;base64,/, ''));
-  var name = kind === 'Quote'
-    ? PXI_fileName_([b.ref, b.client, 'Quote'])
-    : PXI_fileName_([b.ref, b.client, (b.invType || 'Tax') + ' Invoice ' + (b.invNo || '')]);
+  var name = PXI_cleanName_(b.fileName) ||
+    (kind === 'Quote' ? PXI_fileName_([b.client, 'Quote', b.ref]) : PXI_fileName_([b.client, (b.invType || 'Tax') + ' Invoice', b.invNo]));
   var blob = Utilities.newBlob(bytes, 'application/pdf', name);
 
-  if (kind === 'Quote') {
-    var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
-    var row = PXI_findQuoteRowByKey_(qs, b.key);
-    if (row) PXI_trashIfExists_(qs.getRange(row, PXI.Q.PDF_ID).getValue());
-    var file = PXI_folder_('quotes').createFile(blob);
-    var link = file.getUrl();
-    if (row) qs.getRange(row, PXI.Q.PDF_ID, 1, 2).setValues([[file.getId(), link]]);
-    return { status: 'ok', fileId: file.getId(), link: link, row: row || null };
+  var saved = PXI_storePdf_({ kind: kind, key: PXI_clean_(b.key), number: kind === 'Quote' ? PXI_clean_(b.ref) : PXI_clean_(b.invNo),
+                              client: PXI_clean_(b.client), name: name, blob: blob });
+
+  var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
+  var row = PXI_findQuoteRowByKey_(qs, b.key);
+  if (row) {
+    var snap = b.snapshot || { exGst: b.exGst, incGst: b.incGst };
+    if (PXI_num_(snap.incGst) > 0) PXI_writeQuoteTotals_(qs, row, b.key, b.entity, b.location, snap);
+    PXI_mirrorFiles_(qs, row, b.key);
   }
 
-  // Invoice made in the tool: one row per invoice number, replaced if made again
-  if (!b.invNo) return { status: 'error', message: 'Invoice number missing' };
-  var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
-  var found = PXI_findInvoiceRow_(inv, b.invNo);
-  if (found) PXI_trashIfExists_(inv.getRange(found, 14).getValue());
-  var f = PXI_folder_('invoices').createFile(blob);
-  var due = PXI_round_(PXI_num_(b.amountDue));
-  var values = [b.invNo, PXI_clean_(b.ref), PXI_clean_(b.key), PXI_clean_(b.client), PXI_clean_(b.invType) || 'Tax',
-    PXI_today_(), PXI_round_(PXI_num_(b.jobTotal)), due, PXI_round_(due / 11),
-    found ? inv.getRange(found, 10).getValue() === true : false, found ? inv.getRange(found, 11).getValue() : '',
-    'Quote tool', PXI_cleanEntity_(b.entity) || PXI_entityForKey_(b.key), f.getId(), f.getUrl()];
-  var r = found || inv.getLastRow() + 1;
-  inv.getRange(r, 1, 1, values.length).setValues([values]);
-  inv.getRange(r, 10).insertCheckboxes();
-  return { status: 'ok', fileId: f.getId(), link: f.getUrl(), row: r };
+  if (kind === 'Invoice') {
+    // log it for paid tracking; same invoice number = same row, Paid tick kept
+    var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
+    var found = PXI_findInvoiceRow_(inv, b.invNo);
+    var due = PXI_round_(PXI_num_(b.amountDue));
+    var values = [b.invNo, PXI_clean_(b.ref), PXI_clean_(b.key), PXI_clean_(b.client), PXI_clean_(b.invType) || 'Tax',
+      found ? inv.getRange(found, 6).getValue() : PXI_today_(), PXI_round_(PXI_num_(b.jobTotal)), due, PXI_round_(due / 11),
+      found ? inv.getRange(found, 10).getValue() === true : false, found ? inv.getRange(found, 11).getValue() : '',
+      'Quote tool', PXI_cleanEntity_(b.entity) || PXI_entityForKey_(b.key), saved.file.getId(), saved.file.getUrl()];
+    var r = found || inv.getLastRow() + 1;
+    inv.getRange(r, 1, 1, values.length).setValues([values]);
+    inv.getRange(r, 10).insertCheckboxes();
+  }
+  return { status: 'ok', fileId: saved.file.getId(), link: saved.file.getUrl(), name: name,
+           updated: saved.updated, row: row || null,
+           message: row ? '' : 'Saved to Drive, but no saved quote row was found for this quote.' };
+}
+
+// Put a PDF in its folder. If this quote (by key) or invoice (by number) already has a
+// file, that file gets the new PDF as a new version: same file, same link.
+function PXI_storePdf_(o) {
+  var idx = PXI_ss_().getSheetByName(PXI.FILES_TAB);
+  var folderId = o.kind === 'Quote' ? PXI.QUOTES_FOLDER_ID : PXI.INVOICES_FOLDER_ID;
+  var hit = PXI_findFileEntry_(idx, o.kind, o.kind === 'Quote' ? o.key : o.number);
+  var existing = null;
+  if (hit) { try { existing = DriveApp.getFileById(hit.fileId); if (existing.isTrashed()) existing = null; } catch (e) { existing = null; } }
+  if (!existing) existing = PXI_findByName_(folderId, o.number, o.client);
+
+  var file, updated = false;
+  if (existing) {
+    if (typeof Drive === 'undefined' || !Drive.Files || !Drive.Files.update) {
+      throw new Error('The Drive service is not switched on in Apps Script (Services > Drive API), so the existing file could not be updated. Nothing was saved, to avoid a duplicate.');
+    }
+    Drive.Files.update({}, existing.getId(), o.blob);
+    existing.setName(o.name);
+    file = existing; updated = true;
+  } else {
+    file = DriveApp.getFolderById(folderId).createFile(o.blob);
+  }
+  var now = new Date();
+  var rowVals = [o.kind, o.key || '', o.number || '', o.client || '', file.getId(), file.getUrl(), o.name, PXI_now_(), now.getTime()];
+  var r = hit ? hit.row : idx.getLastRow() + 1;
+  idx.getRange(r, 1, 1, rowVals.length).setValues([rowVals]);
+  return { file: file, updated: updated };
+}
+
+function PXI_findFileEntry_(idx, kind, id) {
+  if (!id || idx.getLastRow() < 2) return null;
+  var v = idx.getRange(2, 1, idx.getLastRow() - 1, PXI.FILES_HEADERS.length).getValues();
+  var col = kind === 'Quote' ? 1 : 2; // quotes by key, invoices by number
+  for (var i = v.length - 1; i >= 0; i--) {
+    if (v[i][0] === kind && String(v[i][col]) === String(id)) return { row: i + 2, fileId: String(v[i][4]) };
+  }
+  return null;
+}
+
+// First export after this went in: adopt a PDF already sitting in the folder for the same
+// number and client (e.g. one saved by hand), rather than adding a second copy.
+function PXI_findByName_(folderId, number, client) {
+  if (!number) return null;
+  var it = DriveApp.getFolderById(folderId).getFiles(), best = null;
+  var c = String(client || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed() || f.getMimeType() !== 'application/pdf') continue;
+    var n = f.getName(), nl = n.toLowerCase().replace(/\s+/g, ' ');
+    if (n.indexOf(number) < 0) continue;
+    if (c && nl.indexOf(c) !== 0) continue;
+    if (!best || f.getLastUpdated() > best.getLastUpdated()) best = f;
+  }
+  return best;
+}
+
+// Copy the latest quote and invoice links for this quote onto its sheet row
+function PXI_mirrorFiles_(qs, row, key) {
+  var idx = PXI_ss_().getSheetByName(PXI.FILES_TAB);
+  if (!idx || idx.getLastRow() < 2 || !key) return;
+  var v = idx.getRange(2, 1, idx.getLastRow() - 1, PXI.FILES_HEADERS.length).getValues();
+  var q = null, inv = null;
+  v.forEach(function (r) {
+    if (String(r[1]) !== String(key)) return;
+    if (r[0] === 'Quote' && (!q || r[8] > q[8])) q = r;
+    if (r[0] === 'Invoice' && (!inv || r[8] > inv[8])) inv = r;
+  });
+  if (!q && !inv) return;
+  qs.getRange(row, PXI.Q.QUOTE_LINK, 1, 5).setValues([[
+    q ? q[5] : qs.getRange(row, PXI.Q.QUOTE_LINK).getValue(), q ? q[7] : qs.getRange(row, PXI.Q.QUOTE_EXPORTED).getValue(),
+    inv ? inv[2] : '', inv ? inv[5] : '', inv ? inv[7] : ''
+  ]]);
 }
 
 // Quote tool and request processor share one invoice counter so numbers never clash
@@ -237,15 +329,19 @@ function PXI_buildInvoiceFromRequest_(q) {
     jobTotal: jobTotal, paidRows: paidRows, paidToDate: paidToDate,
     amountDue: amountDue, gst: gst, balanceAfter: balanceAfter
   });
-  var name = PXI_fileName_([quote.ref, quote.client, type + ' Invoice ' + invNo]);
+  var name = PXI_fileName_([quote.client, (snap.client && snap.client.area) || '',
+    ((snap.service ? snap.service + ' ' : '') + type + ' Invoice').trim(), invNo]);
   var pdf = Utilities.newBlob(html, 'text/html', name.replace(/\.pdf$/, '.html')).getAs('application/pdf').setName(name);
-  var file = PXI_folder_('invoices').createFile(pdf);
+  var file = PXI_storePdf_({ kind: 'Invoice', key: quote.key, number: invNo, client: quote.client, name: name, blob: pdf }).file;
 
   var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
   var r = inv.getLastRow() + 1;
   inv.getRange(r, 1, 1, PXI.INV_HEADERS.length).setValues([[invNo, quote.ref, quote.key, quote.client, type, PXI_today_(),
     jobTotal, amountDue, gst, false, '', 'Invoice Request', entity, file.getId(), file.getUrl()]]);
   inv.getRange(r, 10).insertCheckboxes();
+  var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
+  var qrow = PXI_findQuoteRowByKey_(qs, quote.key);
+  if (qrow) PXI_mirrorFiles_(qs, qrow, quote.key);
 
   return { invNo: invNo, jobTotal: jobTotal, paidToDate: paidToDate, amountDue: amountDue, gst: gst,
            balanceAfter: balanceAfter, fileId: file.getId(), link: file.getUrl(), message: notes.join(' ') };
@@ -268,7 +364,7 @@ function PXI_findQuoteForRequest_(ref, client) {
   var sh = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
   var last = sh.getLastRow();
   if (last < 1) throw new Error('The quote sheet is empty.');
-  var rows = sh.getRange(1, 1, last, PXI.Q.PDF_LINK).getValues();
+  var rows = sh.getRange(1, 1, last, PXI.Q.INV_EXPORTED).getValues();
   var want = String(ref).trim().toUpperCase();
   var byKey = /^PXT-\d{10,}$/.test(want);
   var hits = {};
@@ -404,7 +500,7 @@ function PXI_invoiceHtml_(d) {
 // ---------------------------------------------------------------------
 function PXI_setup() {
   var ss = PXI_ss_();
-  [[PXI.REQ_TAB, PXI.REQ_HEADERS], [PXI.INV_TAB, PXI.INV_HEADERS]].forEach(function (t) {
+  [[PXI.REQ_TAB, PXI.REQ_HEADERS], [PXI.INV_TAB, PXI.INV_HEADERS], [PXI.FILES_TAB, PXI.FILES_HEADERS]].forEach(function (t) {
     var sh = ss.getSheetByName(t[0]) || ss.insertSheet(t[0]);
     sh.getRange(1, 1, 1, t[1].length).setValues([t[1]]).setFontWeight('bold').setBackground('#0ABAB5').setFontColor('#ffffff');
     sh.setFrozenRows(1);
@@ -412,7 +508,9 @@ function PXI_setup() {
   var req = ss.getSheetByName(PXI.REQ_TAB);
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(['Deposit', 'Progress', 'Final'], true).setAllowInvalid(false).build();
   req.getRange(2, 3, 999, 1).setDataValidation(rule);
-  PXI_folder_('quotes'); PXI_folder_('invoices');
+  DriveApp.getFolderById(PXI.QUOTES_FOLDER_ID).getName();   // fails loudly if a folder ID is wrong
+  DriveApp.getFolderById(PXI.INVOICES_FOLDER_ID).getName();
+  if (typeof Drive === 'undefined') throw new Error('Add the Drive service first: Services > Drive API > Add. Then run PXI_setup again.');
   ScriptApp.getProjectTriggers().forEach(function (tr) {
     if (tr.getHandlerFunction() === 'PXI_processInvoiceRequests') ScriptApp.deleteTrigger(tr);
   });
@@ -425,21 +523,6 @@ function PXI_setup() {
 // ---------------------------------------------------------------------
 function PXI_ss_() { return SpreadsheetApp.openById(PXI.SHEET_ID); }
 
-function PXI_folder_(which) {
-  var props = PropertiesService.getScriptProperties();
-  var keyName = which === 'quotes' ? 'PXI_QUOTES_FOLDER' : 'PXI_INVOICES_FOLDER';
-  var id = props.getProperty(keyName);
-  if (id) { try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
-  var root = PXI_childFolder_(DriveApp.getRootFolder(), PXI.ROOT_FOLDER);
-  var sub = PXI_childFolder_(root, which === 'quotes' ? PXI.QUOTE_FOLDER : PXI.INVOICE_FOLDER);
-  props.setProperty(keyName, sub.getId());
-  return sub;
-}
-function PXI_childFolder_(parent, name) {
-  var it = parent.getFoldersByName(name);
-  while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) return f; }
-  return parent.createFolder(name);
-}
 function PXI_trashIfExists_(id) {
   if (!id) return;
   try { DriveApp.getFileById(String(id)).setTrashed(true); } catch (e) {}
@@ -455,6 +538,11 @@ function PXI_normType_(t) {
   return t === 'deposit' ? 'Deposit' : t === 'progress' ? 'Progress' : t === 'final' ? 'Final' : '';
 }
 function PXI_invRef_(n) { return 'INV-' + Utilities.formatDate(new Date(), PXI.TZ, 'yyyy') + '-' + ('00' + n).slice(-3); }
+function PXI_cleanName_(n) {
+  n = String(n || '').replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+  if (!n) return '';
+  return /\.pdf$/i.test(n) ? n : n + '.pdf';
+}
 function PXI_fileName_(parts) {
   return parts.map(function (p) { return String(p || '').replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim(); })
     .filter(String).join(' - ') + '.pdf';

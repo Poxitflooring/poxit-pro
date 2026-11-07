@@ -2107,37 +2107,27 @@ function isIOS() {
     return /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   } catch(e) { return false; }
 }
-function useMadePdf() { return isHomeScreenApp() || isIOS(); }
-function openDoc(html) {
-  // iPhone/iPad (app or Safari): show in-page and make a real named PDF for the share sheet
-  if (useMadePdf()) { showDocOverlay(html); return; }
-  // Browser: write the document straight into a real tab (no blob URL) so iOS offers Print and saves a proper PDF
-  let w = null;
-  try { w = window.open('', '_blank'); } catch(e) { w = null; }
-  if (w) {
-    try { w.document.open(); w.document.write(html); w.document.close(); return; } catch(e) {}
-    try { w.close(); } catch(e) {}
-  }
-  showDocOverlay(html);
-}
+function openDoc(html) { showDocOverlay(html); }
+// One document view on every device: Export (PDF to Drive + share sheet), Print where allowed, Close
+let docCtx = null;     // { kind:'Quote'|'Invoice', html, stage, invNo, incGst, deposit }
 function showDocOverlay(html) {
-  // Fallback when a new tab is blocked (e.g. some home screen app modes): show the doc in-page with its own Print button
   closeDocOverlay();
   const quiet = html.replace('window.onload = function(){ window.print(); };', '');
   const tm = html.match(/<title>([^<]*)<\/title>/i);
   window.__docTitle = tm ? tm[1] : '';
+  if (!docCtx || docCtx.html !== html) docCtx = { kind: /TAX INVOICE/.test(html) ? 'Invoice' : 'Quote', html: html, stage: 'deposit' };
   const wrap = document.createElement('div');
   wrap.id = 'docOverlay';
   const topGap = isHomeScreenApp() ? 'max(env(safe-area-inset-top, 0px), 50px)' : 'env(safe-area-inset-top, 0px)';
   wrap.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#111;display:flex;flex-direction:column;';
   wrap.innerHTML = '<div style="display:flex;gap:8px;padding:10px;padding-top:calc(' + topGap + ' + 10px);background:#111;">' +
-    (useMadePdf()
-      ? '<button class="btn" id="docPdfBtn" style="flex:1;" onclick="makeDocPdf()">📄 Make PDF</button>'
-      : '<button class="btn" style="flex:1;" onclick="printDocOverlay()">🖨 Print / Save PDF</button>') +
+    '<button class="btn" id="docExportBtn" style="flex:1;" onclick="exportDoc()" disabled>⏳ Preparing PDF…</button>' +
+    (isHomeScreenApp() ? '' : '<button class="btn" style="flex:0 0 auto;" onclick="printDocOverlay()">🖨 Print</button>') +
     '<button class="btn" style="flex:0 0 auto;" onclick="closeDocOverlay()">✕ Close</button></div>' +
     '<iframe id="docOverlayFrame" style="flex:1;border:0;width:100%;background:#fff;"></iframe>';
   document.body.appendChild(wrap);
   document.getElementById('docOverlayFrame').srcdoc = quiet;
+  prepareDocPdf();
 }
 function printDocOverlay() {
   const f = document.getElementById('docOverlayFrame');
@@ -2146,97 +2136,223 @@ function printDocOverlay() {
   try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e) { window.print(); }
   setTimeout(function(){ document.title = t; }, 1500);
 }
-// ===== Real PDF file for the iPhone home screen app (print is blocked there) =====
-const PDF_LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+
+// ===== PDFs with real, selectable text (jsPDF draws the laid-out page as text) =====
+const PDF_LIBS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+                  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
+// Embedded copies of the document fonts (fonts/ folder), so the PDF measures text exactly as laid out
+const PDF_FACES = [['PxMont',400,'normal','PxMont-400'],['PxMont',600,'normal','PxMont-600'],['PxMont',700,'normal','PxMont-700'],['PxMont',800,'normal','PxMont-800'],
+                   ['PxOpen',400,'normal','PxOpen-400'],['PxOpen',400,'italic','PxOpen-400i'],['PxOpen',600,'normal','PxOpen-600'],['PxOpen',700,'normal','PxOpen-700']];
+const PDF_PAGE_W = 595.28, PDF_PAGE_H = 841.89, PDF_LAYOUT_W = 794, PDF_BOTTOM = 14;
 window.__docPdf = null;
-function loadPdfLib(win) {
+function pdfFontUrl(f) { return new URL('fonts/' + f + '.ttf', document.baseURI).href; }
+function loadScriptInto(win, src) {
   return new Promise(function(resolve, reject) {
-    if (win.html2pdf) return resolve(win.html2pdf);
     const sc = win.document.createElement('script');
-    sc.src = PDF_LIB_URL;
-    sc.onload = function(){ win.html2pdf ? resolve(win.html2pdf) : reject(new Error('PDF maker did not load')); };
+    sc.src = src;
+    sc.onload = resolve;
     sc.onerror = function(){ reject(new Error('Could not load the PDF maker. Check your internet and try again.')); };
     win.document.head.appendChild(sc);
   });
 }
+// Characters the embedded fonts carry; others are swapped or dropped (emoji icons etc.)
+const PDF_CHAR_MAP = { '↳':'›', '→':'›', '✓':'', '✔':'', '✕':'x', '≈':'~', '≥':'>=', '≤':'<=' };
+const PDF_CHAR_OK = /[\x20-\x7E\xA0-\xFF€…‘’“”•–—™‹›\n\t]/;
+function pdfPrepareDoc(win) {
+  const doc = win.document;
+  const st = doc.createElement('style');
+  st.textContent = PDF_FACES.map(function(f) {
+    return "@font-face{font-family:'" + f[0] + "';font-weight:" + f[1] + ";font-style:" + f[2] + ";src:url('" + pdfFontUrl(f[3]) + "') format('truetype');}";
+  }).join('') + '.terms-select{display:none!important;} body{max-width:100%!important;} *{font-kerning:none!important;font-variant-ligatures:none!important;font-feature-settings:"kern" 0,"liga" 0!important;}';
+  doc.head.appendChild(st);
+  doc.querySelectorAll('body, body *').forEach(function(el) {
+    const cs = win.getComputedStyle(el);
+    // capitals written into the text (letter-spaced uppercase otherwise loses its spaces)
+    if (cs.textTransform === 'uppercase') {
+      el.childNodes.forEach(function(n){ if (n.nodeType === 3) n.nodeValue = n.nodeValue.toUpperCase(); });
+      el.style.setProperty('text-transform', 'none', 'important');
+    }
+    // each element onto the embedded copy of its font, at a weight that exists
+    const mont = /montserrat/i.test(cs.fontFamily);
+    let wt = parseInt(cs.fontWeight, 10) || 400;
+    if (cs.fontStyle === 'italic') {
+      el.style.setProperty('font-family', 'PxOpen', 'important'); el.style.setProperty('font-weight', '400', 'important');
+    } else {
+      wt = mont ? (wt >= 750 ? 800 : wt >= 650 ? 700 : wt >= 550 ? 600 : 400) : (wt >= 650 ? 700 : wt >= 550 ? 600 : 400);
+      el.style.setProperty('font-family', mont ? 'PxMont' : 'PxOpen', 'important');
+      el.style.setProperty('font-weight', String(wt), 'important');
+    }
+    // the PDF writer reads sizes as whole pixels: snap so layout matches what it draws
+    const fs = parseFloat(cs.fontSize);
+    if (fs && Math.round(fs) !== fs) el.style.setProperty('font-size', Math.round(fs) + 'px', 'important');
+  });
+  const tw = doc.createTreeWalker(doc.body, 4);
+  for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+    let out = '';
+    for (const ch of n.nodeValue) out += (ch in PDF_CHAR_MAP) ? PDF_CHAR_MAP[ch] : (PDF_CHAR_OK.test(ch) ? ch : '');
+    if (out !== n.nodeValue) n.nodeValue = out;
+  }
+}
+// Keep boxes, rows and paragraphs whole: anything that would straddle a page moves to the next
+// page with a small top gap, and a section heading moves with the block under it.
+function pdfKeepTogether(win) {
+  const doc = win.document;
+  const PAGE = (PDF_PAGE_H - PDF_BOTTOM) / (PDF_PAGE_W / PDF_LAYOUT_W);
+  const GAP = 28;
+  doc.querySelectorAll('.client-box, tr, .payment-box, .bank-box, .notes-box, .disclaimer, .section-heading, .doc-footer, p').forEach(function(el) {
+    if (el.closest('.payment-box') && !el.classList.contains('payment-box')) return;
+    if (el.closest('.client-box') && !el.classList.contains('client-box')) return;
+    const r = el.getBoundingClientRect(), top = r.top + win.scrollY, h = r.height;
+    if (!h || h >= PAGE - GAP) return;
+    if (Math.floor(top / PAGE) === Math.floor((top + h - 1) / PAGE)) return;
+    let anchor = el, aTop = top;
+    const prev = el.previousElementSibling;
+    if (prev && prev.classList.contains('section-heading')) { anchor = prev; aTop = prev.getBoundingClientRect().top + win.scrollY; }
+    const push = (Math.floor(top / PAGE) + 1) * PAGE - aTop + GAP;
+    if (anchor.tagName === 'TR') {
+      const sp = doc.createElement('tr');
+      sp.innerHTML = '<td colspan="9" style="height:' + push + 'px;padding:0;border:0;"></td>';
+      anchor.parentNode.insertBefore(sp, anchor);
+    } else {
+      const sp = doc.createElement('div'); sp.style.height = push + 'px';
+      anchor.parentNode.insertBefore(sp, anchor);
+    }
+  });
+}
 function pdfBlobFrom(frame) {
-  const win = frame.contentWindow, doc = frame.contentDocument;
-  return loadPdfLib(win).then(function(h2p) {
-    const st = doc.createElement('style');
-    st.id = 'pdfCaptureCss';
-    st.textContent = '.terms-select{display:none !important;} body{max-width:100% !important;}';
-    doc.head.appendChild(st);
-    const opt = {
-      margin: [8, 8, 10, 8],
-      image: { type:'jpeg', quality:0.95 },
-      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
-      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-      pagebreak: { mode:['css','legacy'], avoid:['tr','.payment-box','.bank-box'] }
-    };
-    // Rebuild the settings inside the frame so its own code recognises the arrays
-    const frameOpt = win.JSON.parse(JSON.stringify(opt));
-    return h2p().set(frameOpt).from(doc.body).outputPdf('blob').then(function(b) {
-      if (st.parentNode) st.parentNode.removeChild(st);
-      return b;
-    }, function(err) {
-      if (st.parentNode) st.parentNode.removeChild(st);
-      throw err;
+  const win = frame.contentWindow;
+  return PDF_LIBS.reduce(function(p, src) {
+    return p.then(function(){ return (src.indexOf('jspdf') > -1 ? win.jspdf : win.html2canvas) ? null : loadScriptInto(win, src); });
+  }, Promise.resolve()).then(function() {
+    pdfPrepareDoc(win);
+    return Promise.all(PDF_FACES.map(function(f) {
+      return win.document.fonts.load((f[2] === 'italic' ? 'italic ' : '') + f[1] + ' 12px ' + f[0]);
+    })).then(function(){ return win.document.fonts.ready; });
+  }).then(function() {
+    pdfKeepTogether(win);
+    const doc = new win.jspdf.jsPDF({ unit:'pt', format:'a4', orientation:'portrait', compress:true });
+    // settings built inside the frame so its own code recognises the arrays
+    const opts = win.JSON.parse(JSON.stringify({
+      x: 0, y: 0, width: PDF_PAGE_W, windowWidth: PDF_LAYOUT_W, autoPaging: 'text', margin: [0, 0, PDF_BOTTOM, 0],
+      html2canvas: { useCORS: true, backgroundColor: '#ffffff' },
+      fontFaces: PDF_FACES.map(function(f){ return { family: f[0], weight: f[1], style: f[2], src: [{ url: pdfFontUrl(f[3]), format: 'truetype' }] }; })
+    }));
+    return new Promise(function(resolve, reject) {
+      opts.callback = function(d) { try { resolve(d.output('blob')); } catch(e) { reject(e); } };
+      try { doc.html(win.document.body, opts); } catch(e) { reject(e); }
     });
   });
 }
-function onDocTermsChanged(title, stage) {
-  if (title) window.__docTitle = title;
-  // keep the Drive copy in step with the payment stage picked on the invoice
-  if (stage && invoiceCtx) {
-    clearTimeout(onDocTermsChanged._t);
-    onDocTermsChanged._t = setTimeout(function(){ window.__invoiceDriveSave = autoSaveInvoice(stage); }, 1500);
-  }
-  // A PDF made before the stage changed is out of date: go back to Make PDF
-  window.__docPdf = null;
-  const btn = document.getElementById('docPdfBtn');
-  if (btn) { btn.disabled = false; btn.textContent = '📄 Make PDF'; btn.onclick = makeDocPdf; }
+// Make a PDF from document HTML in an off-screen frame (the on-screen preview is left untouched)
+function renderPdfBlob(html) {
+  return new Promise(function(resolve, reject) {
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + PDF_LAYOUT_W + 'px;height:1123px;border:0;pointer-events:none;';
+    f.onload = function() {
+      pdfBlobFrom(f).then(function(b){ f.remove(); resolve(b); }, function(e){ f.remove(); reject(e); });
+    };
+    document.body.appendChild(f);
+    f.srcdoc = html.replace('window.onload = function(){ window.print(); };', '');
+  });
 }
 function docPdfName() {
   let t = window.__docTitle || '';
   t = t.replace(/[\/\\:*?"<>|]/g, '').trim() || 'Poxit Document';
   return t + '.pdf';
 }
-function makeDocPdf() {
-  const btn = document.getElementById('docPdfBtn');
-  const f = document.getElementById('docOverlayFrame');
-  if (!btn || !f) return Promise.resolve();
-  btn.disabled = true; btn.textContent = '⏳ Making PDF...';
-  return pdfBlobFrom(f).then(function(blob) {
-    const name = docPdfName();
-    window.__docPdf = (typeof File === 'function')
-      ? new File([blob], name, { type:'application/pdf' })
-      : Object.assign(blob, { name:name });
-    btn.disabled = false; btn.textContent = '📤 Share PDF';
-    btn.onclick = shareDocPdf;
-  }).catch(function(e) {
-    btn.disabled = false; btn.textContent = '📄 Make PDF';
-    alert('PDF failed: ' + (e && e.message ? e.message : e));
-  });
+function currentDocHtml() {
+  if (!docCtx) return '';
+  return docCtx.kind === 'Invoice' ? invoiceStageHtml(docCtx.html, docCtx.stage || 'deposit') : docCtx.html;
 }
-function shareDocPdf() {
-  const file = window.__docPdf;
-  if (!file) return Promise.resolve();
-  const data = { files:[file], title:file.name };
-  if (navigator.canShare && navigator.share && navigator.canShare(data)) {
-    return navigator.share(data).catch(function(e) {
-      if (e && e.name === 'AbortError') return; // closed the share sheet
-      alert('Share failed: ' + (e && e.message ? e.message : e));
-    });
+// Made as soon as a document opens, so Export can open the share sheet straight from the tap
+function prepareDocPdf() {
+  const token = (prepareDocPdf._n = (prepareDocPdf._n || 0) + 1);
+  window.__docPdf = null;
+  setExportBtn('⏳ Preparing PDF…', true);
+  window.__docPdfReady = renderPdfBlob(currentDocHtml()).then(function(blob) {
+    if (token !== prepareDocPdf._n) return null; // a newer version took over
+    const name = docPdfName();
+    window.__docPdf = (typeof File === 'function') ? new File([blob], name, { type:'application/pdf' }) : Object.assign(blob, { name:name });
+    setExportBtn('⬆ Export', false);
+    return window.__docPdf;
+  }).catch(function(e) {
+    if (token !== prepareDocPdf._n) return null;
+    setExportBtn('↻ Retry PDF', false, prepareDocPdf);
+    driveNote('⚠️ PDF failed: ' + (e && e.message ? e.message : e), true);
+    return null;
+  });
+  return window.__docPdfReady;
+}
+function setExportBtn(text, disabled, handler) {
+  const b = document.getElementById('docExportBtn');
+  if (!b) return;
+  b.textContent = text; b.disabled = !!disabled;
+  b.onclick = handler || exportDoc;
+}
+function onDocTermsChanged(title, stage) {
+  if (title) window.__docTitle = title;
+  if (stage && docCtx && docCtx.kind === 'Invoice') {
+    docCtx.stage = stage;
+    window.__docPdf = null;
+    setExportBtn('⏳ Preparing PDF…', true);
+    clearTimeout(onDocTermsChanged._t);
+    onDocTermsChanged._t = setTimeout(prepareDocPdf, 400);
   }
-  // No share sheet available: download the file instead
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(file);
-  a.download = file.name;
-  document.body.appendChild(a); a.click(); a.remove();
-  return Promise.resolve();
+}
+// Export: share sheet first (iPhone only allows it straight after the tap), Drive save alongside
+function exportDoc() {
+  const file = window.__docPdf;
+  if (!file || !docCtx) return Promise.resolve(null);
+  setExportBtn('⏳ Exporting…', true);
+  let shared;
+  const data = { files: [file] }; // files only: a title makes Google Drive save an extra .txt
+  if (navigator.canShare && navigator.share && navigator.canShare(data)) {
+    shared = navigator.share(data).catch(function(e) {
+      if (e && e.name === 'AbortError') return; // closed the share sheet
+      driveNote('⚠️ Share failed: ' + (e && e.message ? e.message : e), true);
+    });
+  } else {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    shared = Promise.resolve();
+  }
+  const saved = saveDocToDrive(file);
+  window.__exportDone = Promise.all([shared, saved]).then(function(r) {
+    if (document.getElementById('docExportBtn')) setExportBtn('⬆ Export', false);
+    return r[1];
+  });
+  return window.__exportDone;
+}
+function saveDocToDrive(file) {
+  if (!S.saveKey || !S.client.ref) {
+    driveNote('Not saved to Drive: save the quote first, then Export again.', true);
+    return Promise.resolve(null);
+  }
+  const c = S.client, x = docCtx, snap = quoteSnapshot();
+  const body = { action:'savePdf', kind: x.kind, key: S.saveKey, ref: c.ref, fileName: file.name,
+    client: (c.first + ' ' + c.last).replace(/\s+/g, ' ').trim(), entity: c.entity, location: c.location,
+    exGst: snap.exGst, incGst: snap.incGst, snapshot: snap };
+  if (x.kind === 'Invoice') {
+    const st = x.stage || 'deposit';
+    body.invNo = x.invNo; body.invType = INVOICE_STAGE_TYPE[st] || 'Deposit';
+    body.amountDue = r2((st === 'deposit' || st === 'final') ? x.deposit : x.incGst); body.jobTotal = r2(x.incGst);
+  }
+  return blobToBase64(file).then(function(b64) {
+    body.base64 = b64;
+    return postToSheet(body, 60000);
+  }).then(function(j) {
+    driveNote('☁️ ' + (j.updated ? 'Updated in Drive' : 'Saved to Drive') + ': ' + file.name);
+    return j;
+  }).catch(function(e) {
+    driveNote('⚠️ Not saved to Drive: ' + e.message, true);
+    return null;
+  });
 }
 function closeDocOverlay() {
   window.__docPdf = null;
+  prepareDocPdf._n = (prepareDocPdf._n || 0) + 1; // drop any PDF still being made
   const o = document.getElementById('docOverlay');
   if (o) o.remove();
 }
@@ -2280,20 +2396,15 @@ function generatePDF() {
     (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
     '</div>' + docFooter() +
     '<scr' + 'ipt>window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
+  docCtx = { kind:'Quote', html: html };
   openDoc(html);
-  window.__quoteDriveSave = autoSaveDoc('Quote', html, {});
 }
 function generateInvoice() {
   if (!companyBankReady()) alert('Heads up: the company BSB and account number are not set yet, so this invoice will show [FILL IN] in the bank details. Do not send it to a client.');
-  // Open the tab now, while the tap still counts, then fill it once the number arrives
-  let tab = null;
-  if (!useMadePdf()) {
-    try { tab = window.open('', '_blank'); if (tab) tab.document.write('<p style="font-family:sans-serif;padding:24px;">Preparing invoice…</p>'); } catch(e) { tab = null; }
-  }
-  window.__invoiceDone = nextInvoiceRef().then(function(r) { return buildInvoice(r.ref, tab); });
+  window.__invoiceDone = nextInvoiceRef().then(function(r) { return buildInvoice(r.ref); });
   return window.__invoiceDone;
 }
-function buildInvoice(invRef, tab) {
+function buildInvoice(invRef) {
   const c = S.client;
   const client = (c.first + ' ' + c.last).trim() || '—';
   const today = new Date();
@@ -2350,14 +2461,8 @@ function buildInvoice(invRef, tab) {
     '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
     '</div>' + docFooter() +
     '<scr' + 'ipt>var INV_TITLES = ' + JSON.stringify(invTitles).replace(/</g, '\\u003c') + '; function setTerms(type, btn) { document.querySelectorAll(".terms-btn").forEach(function(b){b.classList.remove("active");}); btn.classList.add("active"); ["deposit","final","full","paid"].forEach(function(t){ document.getElementById("terms-"+t).style.display = t===type?"block":"none"; }); if (INV_TITLES[type]) document.title = INV_TITLES[type]; try { var P = (window.parent && window.parent !== window) ? window.parent : window.opener; if (P && P.onDocTermsChanged) P.onDocTermsChanged(document.title, type); } catch(e) {} } window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
-  if (tab && !tab.closed) {
-    try { tab.document.open(); tab.document.write(html); tab.document.close(); }
-    catch(e) { openDoc(html); }
-  } else {
-    openDoc(html);
-  }
-  invoiceCtx = { html: html, ref: invRef, incGst: incGst, deposit: deposit };
-  window.__invoiceDriveSave = autoSaveInvoice('deposit');
+  docCtx = { kind:'Invoice', html: html, stage:'deposit', invNo: invRef, incGst: incGst, deposit: deposit };
+  openDoc(html);
   return invRef;
 }
 // ===== SAVE / LOAD / DELETE =====
@@ -2507,43 +2612,12 @@ function sendQuoteMeta() {
                        location:S.client.location, snapshot: quoteSnapshot() })
     .catch(function(e){ console.warn('Quote totals not sent to sheet: ' + e.message); return null; });
 }
-// Render a document to a PDF off screen (same engine as Make PDF), for Drive
-function renderPdfBlob(html) {
-  return new Promise(function(resolve, reject) {
-    const f = document.createElement('iframe');
-    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
-    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:1200px;border:0;pointer-events:none;';
-    f.onload = function() {
-      pdfBlobFrom(f).then(function(b){ f.remove(); resolve(b); }, function(e){ f.remove(); reject(e); });
-    };
-    document.body.appendChild(f);
-    f.srcdoc = html.replace('window.onload = function(){ window.print(); };', '');
-  });
-}
 function blobToBase64(blob) {
   return new Promise(function(resolve, reject) {
     const r = new FileReader();
     r.onload = function(){ resolve(String(r.result).replace(/^data:[^,]*,/, '')); };
     r.onerror = function(){ reject(new Error('could not read PDF')); };
     r.readAsDataURL(blob);
-  });
-}
-function autoSaveDoc(kind, html, meta) {
-  if (!S.saveKey || !S.client.ref) {
-    driveNote('Save the quote first to keep a copy of this ' + kind.toLowerCase() + ' in Drive.', true);
-    return Promise.resolve(null);
-  }
-  const body = Object.assign({ action:'savePdf', kind: kind, key: S.saveKey, ref: S.client.ref,
-    client: (S.client.first + ' ' + S.client.last).replace(/\s+/g, ' ').trim(), entity: S.client.entity }, meta || {});
-  return renderPdfBlob(html).then(blobToBase64).then(function(b64) {
-    body.base64 = b64;
-    return postToSheet(body, 60000);
-  }).then(function(j) {
-    driveNote('☁️ ' + kind + ' saved to Drive');
-    return j;
-  }).catch(function(e) {
-    driveNote('⚠️ ' + kind + ' not saved to Drive: ' + e.message, true);
-    return null;
   });
 }
 // One invoice counter shared with the sheet, so tool and sheet invoices never clash.
@@ -2560,21 +2634,12 @@ function nextInvoiceRef() {
   });
 }
 const INVOICE_STAGE_TYPE = { deposit:'Deposit', final:'Final', full:'Full Payment', paid:'Paid' };
-let invoiceCtx = null;
 function invoiceStageHtml(html, stage) {
   ['deposit','final','full','paid'].forEach(function(t) {
     const re = new RegExp('<div id="terms-' + t + '" class="payment-box"( style="display:none;")?>');
     html = html.replace(re, '<div id="terms-' + t + '" class="payment-box"' + (t === stage ? '' : ' style="display:none;"') + '>');
   });
   return html;
-}
-function autoSaveInvoice(stage) {
-  if (!invoiceCtx) return Promise.resolve(null);
-  const x = invoiceCtx;
-  const due = (stage === 'deposit' || stage === 'final') ? x.deposit : x.incGst;
-  return autoSaveDoc('Invoice', invoiceStageHtml(x.html, stage), {
-    invNo: x.ref, invType: INVOICE_STAGE_TYPE[stage] || 'Deposit', amountDue: r2(due), jobTotal: r2(x.incGst)
-  });
 }
 function stampNow() {
   const d = new Date();
