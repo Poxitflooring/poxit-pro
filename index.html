@@ -2138,8 +2138,9 @@ function printDocOverlay() {
 }
 
 // ===== PDFs with real, selectable text (jsPDF draws the laid-out page as text) =====
-const PDF_LIBS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-                  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
+// Served from this site (vendor/), not a CDN, so the PDF maker can't disappear or be blocked
+const PDF_LIBS = ['vendor/html2canvas-1.4.1.min.js', 'vendor/jspdf-2.5.1.umd.min.js'];
+const PDF_LOAD_TIMEOUT_MS = 30000;
 // Embedded copies of the document fonts (fonts/ folder), so the PDF measures text exactly as laid out
 const PDF_FACES = [['PxMont',400,'normal','PxMont-400'],['PxMont',600,'normal','PxMont-600'],['PxMont',700,'normal','PxMont-700'],['PxMont',800,'normal','PxMont-800'],
                    ['PxOpen',400,'normal','PxOpen-400'],['PxOpen',400,'italic','PxOpen-400i'],['PxOpen',600,'normal','PxOpen-600'],['PxOpen',700,'normal','PxOpen-700']];
@@ -2149,9 +2150,10 @@ function pdfFontUrl(f) { return new URL('fonts/' + f + '.ttf', document.baseURI)
 function loadScriptInto(win, src) {
   return new Promise(function(resolve, reject) {
     const sc = win.document.createElement('script');
-    sc.src = src;
-    sc.onload = resolve;
-    sc.onerror = function(){ reject(new Error('Could not load the PDF maker. Check your internet and try again.')); };
+    const t = setTimeout(function(){ reject(new Error('The PDF maker took too long to load. Try again.')); }, PDF_LOAD_TIMEOUT_MS);
+    sc.src = new URL(src, document.baseURI).href;
+    sc.onload = function(){ clearTimeout(t); resolve(); };
+    sc.onerror = function(){ clearTimeout(t); reject(new Error('Could not load the PDF maker (' + src.split('/').pop() + ').')); };
     win.document.head.appendChild(sc);
   });
 }
@@ -2244,16 +2246,26 @@ function pdfBlobFrom(frame) {
   });
 }
 // Make a PDF from document HTML in an off-screen frame (the on-screen preview is left untouched)
+// The frame fires "load" for its blank starting page as well as for the document. Starting on the
+// blank page meant the PDF maker began loading into a page that was then thrown away, which Safari
+// reports as a failed load. So the document goes in before the frame is added, and work only starts
+// once the frame is actually showing that document.
 function renderPdfBlob(html) {
   return new Promise(function(resolve, reject) {
     const f = document.createElement('iframe');
     f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
     f.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + PDF_LAYOUT_W + 'px;height:1123px;border:0;pointer-events:none;';
+    let started = false;
     f.onload = function() {
+      if (started) return;
+      let ready = false;
+      try { ready = f.contentWindow.location.href === 'about:srcdoc' && !!f.contentDocument.body && f.contentDocument.body.childNodes.length > 0; } catch(e) {}
+      if (!ready) return; // the blank starting page: wait for the real document
+      started = true;
       pdfBlobFrom(f).then(function(b){ f.remove(); resolve(b); }, function(e){ f.remove(); reject(e); });
     };
-    document.body.appendChild(f);
     f.srcdoc = html.replace('window.onload = function(){ window.print(); };', '');
+    document.body.appendChild(f);
   });
 }
 function docPdfName() {
