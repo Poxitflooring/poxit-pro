@@ -488,6 +488,7 @@ function PXI_invoiceHtml_(d) {
     '<table class="pay">' + pay + '</table>' +
     '<table class="bank" style="margin-top:8pt;"><tr><td><b>Bank Transfer:</b><br>Account Name: <b>' + esc(E.bankName) + '</b><br>' +
     'BSB: <b>' + esc(E.bsb) + '</b> &nbsp;&nbsp; Account: <b>' + esc(E.account) + '</b><br>Reference: <b>' + esc(d.invNo) + '</b></td></tr></table>' +
+    (s.notes || []).map(function (n) { return '<p style="font-size:10pt;line-height:1.6;margin:10pt 0 0;">' + esc(n) + '</p>'; }).join('') +
     '<p class="fine">Payment is due within ' + PXI.DUE_DAYS + ' days. Late payments incur fees as per the signed work contract. ' + esc(E.legalName) + ' ABN ' + esc(E.abn) + '</p>' +
     '</div>' +
     '<table class="foot"><tr><td>' + esc(E.legalName) + ' · ABN ' + esc(E.abn) + (E.acn ? ' · ACN ' + esc(E.acn) : '') + ' · ' + esc(E.address) +

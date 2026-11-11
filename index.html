@@ -210,7 +210,7 @@
     <div id="crackList"></div>
     <button class="btn-add" onclick="addCrack()">＋ Add Crack</button>
   </div></div>
-  <div class="card"><div class="card-header"><div class="card-title">Spalling Repair <span class="badge" id="badge-spalling">$0</span></div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Spalling Repair (Epoxy Mortar) <span class="badge" id="badge-spalling">$0</span></div></div>
   <div class="card-body">
     <div class="row">
       <div class="field"><label>Small (M&amp;M) $35/ea</label><input type="number" data-bind="spalling.small" min="0" value="0"></div>
@@ -220,6 +220,19 @@
       <div class="field"><label>Large (Fist+) $90/ea</label><input type="number" data-bind="spalling.large" min="0" value="0"></div>
       <div class="field"><label>Patched Area m² @$110</label><input type="number" data-bind="spalling.area" min="0" step="0.1" value="0"></div>
     </div>
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">Spalling Repair (Cementitious) <span class="badge" id="badge-spallCem">$0</span></div></div>
+  <div class="card-body">
+    <div class="info-box" style="font-size:10px;margin-bottom:10px;">Cement based patch at a lower price. When this is on a quote, the terms automatically say the workmanship warranty does not cover these repaired areas.</div>
+    <div class="row">
+      <div class="field"><label>Small (M&amp;M) $25/ea</label><input type="number" data-bind="spallingCem.small" min="0" value="0"></div>
+      <div class="field"><label>Medium (Golf Ball) $40/ea</label><input type="number" data-bind="spallingCem.med" min="0" value="0"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Large (Fist+) $65/ea</label><input type="number" data-bind="spallingCem.large" min="0" value="0"></div>
+      <div class="field"></div>
+    </div>
+    <div id="spallOptBox"></div>
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">Skim Coat <span class="badge" id="badge-skim">$0</span></div></div>
   <div class="card-body">
@@ -346,6 +359,7 @@
       <div class="s-value" style="font-size:28px;" id="summaryIncGst">$0.00</div>
     </div>
     <div id="summaryPlan"></div>
+    <div id="summaryOptions"></div>
     <div id="summaryDocName"></div>
   </div></div>
 
@@ -487,6 +501,8 @@ const PRICE = {
   silJoint: 8, polyJoint: 18,
   crackRate: 40, crackMin: 120,
   spall: { small:35, med:55, large:90, area:110 },
+  // Cementitious spalling: Large = 70% of the epoxy Large rate ($90), rounded to the nearest $5
+  spallCem: { small:25, med:40, large:65 },
   demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, cabinetry:60 },
   kitchenStrip: [ {max:6, price:1200}, {max:10, price:2800}, {max:Infinity, price:4800} ],
   pwUpsell: {
@@ -549,6 +565,8 @@ function freshState() {
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
+    spallingCem: { small:0, med:0, large:0 },
+    spallingOpt: { alternatives:false, include:'epoxy' },
     skim: { area:0, note:'' },
     joints: [], softCuts: [], siliconeJoints: [], polyJoints: [], coreHoles: [],
     ramps: [],
@@ -1545,7 +1563,7 @@ function populateMeasureDest() {
   o += '<option value="NEW:pw">🧼 Pressure Wash — ＋ ' + (S.pwZones.length ? 'another' : 'new') + ' area</option>';
   if (S.pwPlan && S.pwPlan.enabled) o += '<option value="pwPlan.area">🔁 Pressure Clean Plan — Area</option>';
   if (S.waste.enabled) o += '<option value="waste.m2">🚛 Waste Disposal — Ground Area</option>';
-  if (S.services['epoxy'] || S.spalling) o += '<option value="spalling.area">🔧 Spalling — Patched Area</option>';
+  if (S.services['epoxy'] || S.spalling) o += '<option value="spalling.area">🔧 Spalling (Epoxy Mortar) — Patched Area</option>';
   o += '<option value="skim.area">🔧 Skim Coat — Area</option>';
   o += '<option value="demo.carpet">🔨 Demo — Carpet Removal</option>';
   o += '<option value="demo.laminate">🔨 Demo — Laminate Removal</option>';
@@ -1687,16 +1705,11 @@ function buildSections() {
     cAdd.push({ label:'Crack — ' + c.lm + 'lm × ' + c.qty, price:p });
   });
   if (cSub > 0) sections.push({ key:'cracks', category:'🔧 Concrete Crack Repair', zoneName:'', desc:'', addons:cAdd, subtotal:cSub });
-  const sp = S.spalling;
-  const spSub = (sp.small||0)*PRICE.spall.small + (sp.med||0)*PRICE.spall.med + (sp.large||0)*PRICE.spall.large + (sp.area||0)*PRICE.spall.area;
-  if (spSub > 0) {
-    const sa = [];
-    if (sp.small>0) sa.push({label:'Small × ' + sp.small, price:sp.small*PRICE.spall.small});
-    if (sp.med>0) sa.push({label:'Medium × ' + sp.med, price:sp.med*PRICE.spall.med});
-    if (sp.large>0) sa.push({label:'Large × ' + sp.large, price:sp.large*PRICE.spall.large});
-    if (sp.area>0) sa.push({label:'Patched Area ' + sp.area + 'm²', price:sp.area*PRICE.spall.area});
-    sections.push({ key:'spalling', category:'🔧 Spalling Repair', zoneName:'', desc:'', addons:sa, subtotal:spSub });
-  }
+  // Spalling: epoxy mortar and cementitious. Quoted as alternatives, only the chosen one is in the total.
+  const spOpt = spallingOptionsActive();
+  const spEp = spallingEpoxySection(spOpt), spCm = spallingCemSection(spOpt);
+  if (spEp && (!spOpt || S.spallingOpt.include !== 'cem')) sections.push(spEp);
+  if (spCm && (!spOpt || S.spallingOpt.include === 'cem')) sections.push(spCm);
   const skA = (S.skim && parseFloat(S.skim.area)) || 0;
   if (skA > 0) {
     const skBy = skA * PRICE.skim, skTot = Math.max(skBy, PRICE.skimMin);
@@ -1823,6 +1836,104 @@ function buildSections() {
   })();
   return sections;
 }
+// ===== SPALLING: epoxy mortar vs cementitious, optionally quoted as Option 1 / Option 2 =====
+const CEM_WARRANTY_NOTE = "Cementitious repairs: Poxit Flooring's workmanship warranty does not cover the repaired areas, or any coating failure caused by them. Statutory warranties under Queensland law still apply.";
+function spallingEpoxySection(asOption) {
+  const sp = S.spalling || {};
+  const sub = (sp.small||0)*PRICE.spall.small + (sp.med||0)*PRICE.spall.med + (sp.large||0)*PRICE.spall.large + (sp.area||0)*PRICE.spall.area;
+  if (!(sub > 0)) return null;
+  const sa = [];
+  if (sp.small>0) sa.push({label:'Small × ' + sp.small, price:sp.small*PRICE.spall.small});
+  if (sp.med>0) sa.push({label:'Medium × ' + sp.med, price:sp.med*PRICE.spall.med});
+  if (sp.large>0) sa.push({label:'Large × ' + sp.large, price:sp.large*PRICE.spall.large});
+  if (sp.area>0) sa.push({label:'Patched Area ' + sp.area + 'm²', price:sp.area*PRICE.spall.area});
+  return { key:'spalling', category:'🔧 Spalling Repair (Epoxy Mortar)' + (asOption ? ': Option 1' : ''), zoneName:'', desc:'', addons:sa, subtotal:sub };
+}
+function spallingCemSection(asOption) {
+  const sp = S.spallingCem || {};
+  const sub = (sp.small||0)*PRICE.spallCem.small + (sp.med||0)*PRICE.spallCem.med + (sp.large||0)*PRICE.spallCem.large;
+  if (!(sub > 0)) return null;
+  const sa = [];
+  if (sp.small>0) sa.push({label:'Small × ' + sp.small, price:sp.small*PRICE.spallCem.small});
+  if (sp.med>0) sa.push({label:'Medium × ' + sp.med, price:sp.med*PRICE.spallCem.med});
+  if (sp.large>0) sa.push({label:'Large × ' + sp.large, price:sp.large*PRICE.spallCem.large});
+  return { key:'spallCem', category:'🔧 Spalling Repair (Cementitious)' + (asOption ? ': Option 2' : ''), zoneName:'', desc:'', addons:sa, subtotal:sub };
+}
+function spallingOptionsActive() {
+  return !!(S.spallingOpt && S.spallingOpt.alternatives && spallingEpoxySection() && spallingCemSection());
+}
+function totalsFor(sections) {
+  let base = 0; sections.forEach(function(s){ base += effSub(s); });
+  let customItems = 0; S.custom.items.forEach(function(ci){ customItems += (ci.price||0); });
+  const adjustment = getAdjustment(base + customItems);
+  const exGst = base + customItems + adjustment;
+  return { exGst: exGst, gst: exGst * 0.1, incGst: exGst * 1.1 };
+}
+// Both options with their own price and the whole quote's total under each
+function spallingOptions() {
+  if (!spallingOptionsActive()) return null;
+  const others = buildSections().filter(function(s){ return s.key !== 'spalling' && s.key !== 'spallCem'; });
+  const ep = spallingEpoxySection(true), cm = spallingCemSection(true);
+  const include = S.spallingOpt.include === 'cem' ? 2 : 1;
+  return { include: include, options: [
+    { n:1, key:'epoxy', name:'Spalling Repair (Epoxy Mortar)', section:ep, price:effSub(ep), totals:totalsFor(others.concat([ep])) },
+    { n:2, key:'cem', name:'Spalling Repair (Cementitious)', section:cm, price:effSub(cm), totals:totalsFor(others.concat([cm])) }
+  ]};
+}
+function cementitiousOnQuote() { return !!spallingCemSection(); }
+function cemWarrantyHTML() {
+  return '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-top:8px;"><strong>Cementitious repairs:</strong>' + CEM_WARRANTY_NOTE.replace(/^Cementitious repairs:/, '') + '</p>';
+}
+function spallingOptionsDocHTML() {
+  const o = spallingOptions();
+  if (!o) return '';
+  const other = o.options[2 - o.include];
+  let h = '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Spalling Repair Options</div>';
+  o.options.forEach(function(x) {
+    const inc = x.n === o.include;
+    h += '<div class="payment-row"><div><strong>Option ' + x.n + ': ' + x.name + '</strong>' + (inc ? ' (included in the Contract Price)' : '') +
+      '<br><span style="font-size:10.5px;color:#777;">' + x.section.addons.map(function(a){ return a.label; }).join(' · ') + '</span></div>' +
+      '<div class="p-amount">' + fmt(x.price) + ' ex GST</div></div>' +
+      '<div class="payment-row"><div>Quote total with Option ' + x.n + ' (inc GST)</div><div class="p-amount">' + fmt(x.totals.incGst) + '</div></div>';
+  });
+  h += '<p style="font-size:11px;line-height:1.6;color:#555;margin:8px 0 0;">The Contract Price above includes Option ' + o.include + '. Choose Option ' + other.n + ' instead and the total becomes ' + fmt(other.totals.incGst) + ' inc GST.</p></div>';
+  return h;
+}
+function setSpallOpt(field, val) {
+  if (!S.spallingOpt) S.spallingOpt = { alternatives:false, include:'epoxy' };
+  S.spallingOpt[field] = val;
+  calcAll();
+}
+function renderSpallingOpt() {
+  const box = document.getElementById('spallOptBox');
+  if (!box) return;
+  const both = !!(spallingEpoxySection() && spallingCemSection());
+  if (!both) { box.innerHTML = ''; return; }
+  const on = !!(S.spallingOpt && S.spallingOpt.alternatives);
+  let h = '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">' +
+    '<div class="toggle-row" style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><div style="font-size:12px;">Quote both as options<br><span class="text-muted" style="font-size:10.5px;">Option 1 Epoxy Mortar / Option 2 Cementitious</span></div>' +
+    '<label class="toggle-switch"><input type="checkbox" id="spallAltToggle" ' + (on ? 'checked' : '') + ' onchange="setSpallOpt(\'alternatives\', this.checked)"><span class="toggle-slider"></span></label></div>';
+  if (on) {
+    const o = spallingOptions();
+    h += '<div class="field" style="margin-top:8px;"><label>Option in the quote total</label><select id="spallIncludeSel" onchange="setSpallOpt(\'include\', this.value)">' +
+      '<option value="epoxy"' + (o.include === 1 ? ' selected' : '') + '>Option 1: Epoxy Mortar</option>' +
+      '<option value="cem"' + (o.include === 2 ? ' selected' : '') + '>Option 2: Cementitious</option></select></div>' +
+      o.options.map(function(x){ return '<div class="text-muted" style="font-size:11px;">Option ' + x.n + ': ' + fmt(x.price) + ' ex GST, quote total ' + fmt(x.totals.incGst) + ' inc GST' + (x.n === o.include ? ' (in total)' : '') + '</div>'; }).join('');
+  } else {
+    h += '<div class="text-muted" style="font-size:11px;margin-top:6px;">Both are in the total right now. Switch on to quote them as alternatives.</div>';
+  }
+  box.innerHTML = h + '</div>';
+}
+function renderSummaryOptions() {
+  const el = document.getElementById('summaryOptions');
+  if (!el) return;
+  const o = spallingOptions();
+  if (!o) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;">' +
+    '<div style="font-weight:600;margin-bottom:4px;">Spalling options</div>' +
+    o.options.map(function(x){ return '<div class="text-muted">Option ' + x.n + ' ' + (x.key === 'epoxy' ? 'Epoxy Mortar' : 'Cementitious') + ': ' + fmt(x.price) + ' ex GST, quote total ' + fmt(x.totals.incGst) + ' inc GST' + (x.n === o.include ? ' <strong>(in total)</strong>' : '') + '</div>'; }).join('') +
+    '</div>';
+}
 function effSub(sec) {
   const ov = S.overrides[sec.key];
   return (ov !== undefined && ov !== null && ov !== '') ? parseFloat(ov) : sec.subtotal;
@@ -1871,7 +1982,10 @@ function calcAll() {
   badge('badge-care', sumKeys('care-'));
   badge('badge-shine', sumKeys('shine-'));
   badge('badge-crack', sumKeys('cracks'));
-  badge('badge-spalling', sumKeys('spalling'));
+  badge('badge-spalling', (spallingEpoxySection() || {subtotal:0}).subtotal);
+  badge('badge-spallCem', (spallingCemSection() || {subtotal:0}).subtotal);
+  renderSpallingOpt();
+  renderSummaryOptions();
   badge('badge-skim', sumKeys('skim'));
   (function(){ const e = document.getElementById('skimRateLbl'); if (e) e.textContent = PRICE.skim; })();
   badge('badge-joints', sumKeys('joints'));
@@ -2401,8 +2515,10 @@ function generatePDF() {
     '<tr class="total-gst"><td>GST (10%)</td><td class="price-col">' + fmt(gst) + '</td></tr>' +
     '<tr class="total-inc"><td>TOTAL AMOUNT DUE (Inc GST)</td><td class="price-col">' + fmt(incGst) + '</td></tr></table>' +
     '<div class="disclaimer">This price is based on visible and reasonably assessable conditions at the time of quoting only. Price does not account for hidden subsurface conditions, scope changes, or variations.</div>' +
+    spallingOptionsDocHTML() +
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Payment Terms</span></div>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;">All quotes are valid for <strong>30 days</strong> from the date of issue. A <strong>50% non-refundable deposit</strong> is required to confirm booking and reserve the job date. Remaining 50% is due on <strong>completion of work before Poxit leaves the site</strong>.</p>' +
+    (cementitiousOnQuote() ? cemWarrantyHTML() : '') +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showQuote) +
     (c.clientNotes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
     (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
@@ -2470,6 +2586,7 @@ function buildInvoice(invRef) {
     '<div class="payment-row"><div>Total Amount Paid</div><div class="p-amount" style="color:#4caf6e;">' + fmt(incGst) + '</div></div></div>' +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
     '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invRef + '</strong></div>' +
+    (sections.some(function(x){ return x.key === 'spallCem'; }) ? cemWarrantyHTML() : '') +
     '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
     '</div>' + docFooter() +
     '<scr' + 'ipt>var INV_TITLES = ' + JSON.stringify(invTitles).replace(/</g, '\\u003c') + '; function setTerms(type, btn) { document.querySelectorAll(".terms-btn").forEach(function(b){b.classList.remove("active");}); btn.classList.add("active"); ["deposit","final","full","paid"].forEach(function(t){ document.getElementById("terms-"+t).style.display = t===type?"block":"none"; }); if (INV_TITLES[type]) document.title = INV_TITLES[type]; try { var P = (window.parent && window.parent !== window) ? window.parent : window.opener; if (P && P.onDocTermsChanged) P.onDocTermsChanged(document.title, type); } catch(e) {} } window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
@@ -2614,7 +2731,10 @@ function quoteSnapshot() {
   S.custom.items.forEach(function(ci) {
     if (ci.price > 0) lines.push({ category: cleanSnapText(ci.desc) || 'Custom Item', zoneName:'', desc:'', amount: r2(ci.price), addons: [] });
   });
-  return { exGst: r2(total), gst: r2(total * 0.1), incGst: r2(total * 1.1), adjustment: r2(adjustment), lines: lines,
+  const so = spallingOptions();
+  const options = so ? so.options.map(function(x){ return { option: x.n, name: x.name, exGst: r2(x.price), quoteIncGst: r2(x.totals.incGst), inTotal: x.n === so.include }; }) : [];
+  const notes = sections.some(function(x){ return x.key === 'spallCem'; }) ? [CEM_WARRANTY_NOTE] : [];
+  return { exGst: r2(total), gst: r2(total * 0.1), incGst: r2(total * 1.1), adjustment: r2(adjustment), lines: lines, options: options, notes: notes,
            ref: c.ref, service: docJobLabel(),
            client: { name: (c.first + ' ' + c.last).replace(/\s+/g, ' ').trim(), phone: c.phone, email: c.email,
                      address: c.address, suburb: c.suburb, area: c.area } };
