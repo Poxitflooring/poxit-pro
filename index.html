@@ -141,6 +141,7 @@
   <div class="tab" data-tab="demo" onclick="showTab('demo')">🔨 Demo</div>
   <div class="tab" data-tab="pw" onclick="showTab('pw')">🧼 Pressure Wash</div>
   <div class="tab" data-tab="lm" onclick="showTab('lm')">🦺 Line Marking</div>
+  <div class="tab" data-tab="comm" onclick="showTab('comm')">🏭 Commercial</div>
   <div class="tab" data-tab="summary" onclick="showTab('summary')">💰 Summary</div>
   <div class="tab" style="color:var(--red);" onclick="confirmReset()">🔄 Clear Job</div>
 </div>
@@ -341,12 +342,19 @@
   <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
 </div>
 
+<div id="tab-comm" class="section">
+  <div class="info-box"><strong>Commercial &amp; Chemical Resistant Systems.</strong> Kennels, food prep, wash bays, plant rooms. Each area is priced on the system you pick; the PDF shows Hychem Premium and Sika Standard side by side so the client can choose. Material cost and margin below are for you only and never go on the PDF.</div>
+  <div class="card"><div class="card-header"><div class="card-title">🏭 Commercial &amp; Chemical Resistant Systems <span class="badge" id="badge-comm">$0</span></div></div>
+  <div class="card-body" id="commContainer"></div></div>
+  <div class="nav-row"><button class="nav-btn" onclick="prevTab()">◀ Back</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
+</div>
+
 <div id="tab-summary" class="section">
   <div class="card"><div class="card-header"><div class="card-title">Quote Summary</div>
     <button class="btn-icon" id="pricingToggleBtn" onclick="togglePricingMode()" style="font-size:11px;padding:6px 10px;">🔍 Show Prices</button></div>
   <div class="card-body">
     <div class="info-box" style="font-size:11px;padding:7px 10px;">
-      PDF pricing breakdown: <strong id="pricingModeLabel" style="color:var(--red);">OFF</strong> · Type in a price box to <strong>override</strong> any line before sending.
+      PDF pricing breakdown: <strong id="pricingModeLabel" style="color:var(--red);">OFF</strong> · Tap <strong>✎ Edit</strong> on any line to rename it, change its description, qty, unit, rate or amount, or delete it. Edits save with the quote and print on the PDF exactly as shown.
     </div>
     <div id="summaryLines"></div>
     <div class="summary-total-row"><div class="s-label">TOTAL EX-GST</div><div class="s-value" id="summaryExGst">$0.00</div></div>
@@ -503,6 +511,13 @@ const PRICE = {
   spall: { small:35, med:55, large:90, area:110 },
   // Cementitious spalling: Large = 70% of the epoxy Large rate ($90), rounded to the nearest $5
   spallCem: { small:25, med:40, large:65 },
+  // Commercial & Chemical Resistant Systems (ex GST). mat = internal material cost, never printed.
+  comm: {
+    'Hychem Premium': { floor:120, wall:100, coving:80, mat:{ floor:27, wall:25, coving:8 } },
+    'Sika Standard':  { floor:75,  wall:50,  coving:80, mat:{ floor:0,  wall:0,  coving:0 } }
+  },
+  commJoint: { 'Hyflex NS':35, 'Hyflex FC':25 },
+  commRouting: 8,
   demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, cabinetry:60 },
   kitchenStrip: [ {max:6, price:1200}, {max:10, price:2800}, {max:Infinity, price:4800} ],
   pwUpsell: {
@@ -567,6 +582,10 @@ function freshState() {
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
     spallingCem: { small:0, med:0, large:0 },
     spallingOpt: { alternatives:false, include:'epoxy' },
+    commAreas: [],
+    commDiscount: { type:'none', amount:0, label:'' },
+    commSikaSpec: 'Sika commercial epoxy floor and wall system',
+    lineEdits: {},
     skim: { area:0, note:'' },
     joints: [], softCuts: [], siliconeJoints: [], polyJoints: [], coreHoles: [],
     ramps: [],
@@ -621,7 +640,7 @@ function syncBoundInputs() {
   });
 }
 
-const NAV = ['client','measure','services','repairs','details','addons','joints','demo','pw','lm','summary'];
+const NAV = ['client','measure','services','repairs','details','addons','joints','demo','pw','lm','comm','summary'];
 let currentTab = 'client';
 function showTab(name) {
   currentTab = name;
@@ -637,6 +656,7 @@ function showTab(name) {
   if (name === 'measure') populateMeasureDest();
   if (name === 'pw') { renderPw(); renderPwPlan(); }
   if (name === 'lm') renderLm();
+  if (name === 'comm') renderComm();
   if (name === 'repairs') renderCancer();
   calcAll();
   window.scrollTo(0,0);
@@ -1634,7 +1654,9 @@ function epoxyAddonsList(z) {
   if (a.stencil && a.stencilM2 > 0) list.push({ label:'Stencil (' + a.stencilM2 + 'm²)', price: a.stencilM2*(parseFloat(a.stencilDiff)||25) });
   return list;
 }
-function buildSections() {
+// Every quote line goes through the summary's manual edits before anything uses it
+function buildSections() { return applyLineEdits(buildSectionsRaw()); }
+function buildSectionsRaw() {
   const sections = [];
   S.epoxyZones.forEach(function(z,i) {
     if (!z.area) return;
@@ -1811,6 +1833,7 @@ function buildSections() {
     const roofAdd = [{ label:roofTierLabel + ' ' + (r.beds==='5'?'5+':r.beds) + ' Bedroom Roof Wash', price:roofSub }];
     if (roofSub > 0) sections.push({ key:'roofWash', category:'🏠 Roof Cleaning Upsell', zoneName:'', desc:'Soft wash roof clean — offered alongside house wash', addons:roofAdd, subtotal:roofSub });
   }
+  commSections().forEach(function(sec){ sections.push(sec); });
   if (S.custom.travelKm > 0) {
     const tDays = Math.max(1, parseInt(S.custom.travelDays) || 1);
     const tKm = S.custom.travelKm * 2 * tDays;
@@ -1934,6 +1957,274 @@ function renderSummaryOptions() {
     o.options.map(function(x){ return '<div class="text-muted">Option ' + x.n + ' ' + (x.key === 'epoxy' ? 'Epoxy Mortar' : 'Cementitious') + ': ' + fmt(x.price) + ' ex GST, quote total ' + fmt(x.totals.incGst) + ' inc GST' + (x.n === o.include ? ' <strong>(in total)</strong>' : '') + '</div>'; }).join('') +
     '</div>';
 }
+// ===== COMMERCIAL & CHEMICAL RESISTANT SYSTEMS =====
+const COMM_SYSTEMS = ['Hychem Premium', 'Sika Standard'];
+const COMM_DISCOUNTS = [['none','None'], ['lastfree','Last area free'], ['flat','Flat $ amount'], ['pct','Percentage %']];
+const HYCHEM_SPEC = '4 coat floor system, approx 2 mm build with sand broadcast. Walls 3 coats plus filler. Coved junctions. Hyflex NS sealed joints. 15 to 20 year design life.';
+function commNum(v) { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 0; }
+function commQty(a) { return Math.max(1, Math.floor(commNum(a.qty) || 1)); }
+// One unit of an area on a given system (joints price the same on both)
+function commUnit(a, system) {
+  const P = PRICE.comm[system] || PRICE.comm['Hychem Premium'];
+  const floor = commNum(a.floor) * P.floor, wall = commNum(a.wall) * P.wall, coving = commNum(a.coving) * P.coving;
+  const jRate = (PRICE.commJoint[a.jointType] || PRICE.commJoint['Hyflex NS']) + (a.routing ? PRICE.commRouting : 0);
+  const joints = commNum(a.joints) * jRate;
+  return { floor: floor, wall: wall, coving: coving, joints: joints, jRate: jRate, total: floor + wall + coving + joints };
+}
+function commMatRates(system) {
+  if (system === 'Sika Standard') {
+    let m = null; try { m = JSON.parse(localStorage.getItem('poxit_sika_mat') || 'null'); } catch(e) {}
+    return { floor: commNum(m && m.floor), wall: commNum(m && m.wall), coving: commNum(m && m.coving) };
+  }
+  return PRICE.comm['Hychem Premium'].mat;
+}
+function setSikaMat(field, val) {
+  let m = {}; try { m = JSON.parse(localStorage.getItem('poxit_sika_mat') || '{}') || {}; } catch(e) {}
+  m[field] = commNum(val);
+  try { localStorage.setItem('poxit_sika_mat', JSON.stringify(m)); } catch(e) {}
+  renderCommMargins();
+}
+function commMaterial(a, system) {
+  const m = commMatRates(system);
+  return (commNum(a.floor) * m.floor + commNum(a.wall) * m.wall + commNum(a.coving) * m.coving) * commQty(a);
+}
+// Discount on the commercial areas, given the area totals in order
+function commDiscountFor(areaTotals, unitTotals) {
+  const d = S.commDiscount || {}, sub = areaTotals.reduce(function(t, x){ return t + x; }, 0);
+  if (!sub) return 0;
+  if (d.type === 'lastfree') return unitTotals.length ? unitTotals[unitTotals.length - 1] : 0; // one unit of the last area
+  if (d.type === 'flat') return Math.min(commNum(d.amount), sub);
+  if (d.type === 'pct') return sub * Math.min(commNum(d.amount), 100) / 100;
+  return 0;
+}
+function commDiscountLabel() {
+  const d = S.commDiscount || {};
+  if (d.label && d.label.trim()) return d.label.trim();
+  if (d.type === 'lastfree') return 'Discount: last area free';
+  if (d.type === 'pct') return 'Discount (' + commNum(d.amount) + '%)';
+  return 'Discount';
+}
+function commAreaDesc(a) {
+  const parts = [];
+  if (commNum(a.floor)) parts.push('Floor ' + commNum(a.floor) + 'm²');
+  if (commNum(a.wall)) parts.push('Walls ' + commNum(a.wall) + 'm²');
+  if (commNum(a.coving)) parts.push('Coving ' + commNum(a.coving) + 'lm');
+  if (commNum(a.joints)) parts.push('Joints ' + commNum(a.joints) + 'lm ' + (a.jointType || 'Hyflex NS') + (a.routing ? ' (routed)' : ''));
+  return parts.join(' · ');
+}
+// Quote lines: one per area on its chosen system (or a forced system for the side by side), plus the discount
+function commSections(forceSystem) {
+  const areas = (S.commAreas || []).filter(function(a){ return commUnit(a, a.system).total > 0; });
+  if (!areas.length) return [];
+  const secs = [], totals = [], units = [];
+  areas.forEach(function(a) {
+    const sys = forceSystem || (COMM_SYSTEMS.indexOf(a.system) > -1 ? a.system : 'Hychem Premium');
+    const P = PRICE.comm[sys], u = commUnit(a, sys), q = commQty(a);
+    const add = [];
+    if (u.floor) add.push({ label:'Floor ' + commNum(a.floor) + 'm² @ $' + P.floor + '/m²', price: u.floor * q });
+    if (u.wall) add.push({ label:'Walls ' + commNum(a.wall) + 'm² @ $' + P.wall + '/m²', price: u.wall * q });
+    if (u.coving) add.push({ label:'Coving ' + commNum(a.coving) + 'lm @ $' + P.coving + '/lm', price: u.coving * q });
+    if (u.joints) add.push({ label:'Joints ' + (a.jointType || 'Hyflex NS') + ' ' + commNum(a.joints) + 'lm @ $' + u.jRate + '/lm' + (a.routing ? ' incl. routing' : ''), price: u.joints * q });
+    if (q > 1) add.push({ label:q + ' identical areas at ' + fmt(u.total) + ' each', price: u.total * q });
+    const i = S.commAreas.indexOf(a);
+    secs.push({ key:'comm-' + i, category:'🏭 ' + sys + ' System', zoneName:(a.name || 'Area ' + (i + 1)) + (q > 1 ? ' × ' + q : ''),
+                desc: commAreaDesc(a), addons: add, subtotal: u.total * q, commSystem: sys });
+    totals.push(u.total * q); units.push(u.total);
+  });
+  const disc = commDiscountFor(totals, units);
+  if (disc > 0) secs.push({ key:'comm-discount', category: commDiscountLabel(), zoneName:'', desc:'', addons:[], subtotal: -disc });
+  return secs;
+}
+// Hychem and Sika side by side: commercial subtotal and the whole quote total under each
+function commComparison() {
+  if (!commSections().length) return null;
+  const others = buildSections().filter(function(s){ return s.key.indexOf('comm-') !== 0; });
+  const chosen = {}; (S.commAreas || []).forEach(function(a){ if (commUnit(a, a.system).total > 0) chosen[a.system] = 1; });
+  const picked = Object.keys(chosen).length === 1 ? Object.keys(chosen)[0] : '';
+  return { picked: picked, systems: COMM_SYSTEMS.map(function(sys) {
+    // the picked system uses the quote's own (possibly edited) lines so it matches the Quote Total
+    const secs = sys === picked ? buildSections().filter(function(s){ return s.key.indexOf('comm-') === 0; }) : commSections(sys);
+    const sub = secs.reduce(function(t, x){ return t + effSub(x); }, 0);
+    return { system: sys, sections: secs, subtotal: sub, totals: totalsFor(others.concat(secs)) };
+  })};
+}
+function commComparisonDocHTML() {
+  const cmp = commComparison();
+  if (!cmp) return '';
+  const H = cmp.systems[0], K = cmp.systems[1];
+  const areaRows = H.sections.filter(function(x){ return x.key !== 'comm-discount'; }).map(function(h) {
+    const k = K.sections.filter(function(x){ return x.key === h.key; })[0];
+    return '<tr><td>' + (h.zoneName || h.category) + '</td><td class="price-col">' + fmt(effSub(h)) + '</td><td class="price-col">' + (k ? fmt(effSub(k)) : '') + '</td></tr>';
+  }).join('');
+  const hd = H.sections.filter(function(x){ return x.key === 'comm-discount'; })[0], kd = K.sections.filter(function(x){ return x.key === 'comm-discount'; })[0];
+  const discRow = (hd || kd) ? '<tr><td>' + (hd || kd).category + '</td><td class="price-col">' + (hd ? fmt(effSub(hd)) : '') + '</td><td class="price-col">' + (kd ? fmt(effSub(kd)) : '') + '</td></tr>' : '';
+  const note = cmp.picked ? 'The Quote Total above is based on ' + cmp.picked + '.' : 'The Quote Total above is based on the system shown for each area.';
+  return '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Choose Your System</div>' +
+    '<table class="totals-table" style="width:100%;"><tr><td><strong>Area</strong></td><td class="price-col"><strong>Hychem Premium</strong></td><td class="price-col"><strong>Sika Standard</strong></td></tr>' +
+    areaRows + discRow +
+    '<tr class="total-ex"><td>System subtotal (ex GST)</td><td class="price-col">' + fmt(H.subtotal) + '</td><td class="price-col">' + fmt(K.subtotal) + '</td></tr>' +
+    '<tr class="total-inc"><td>Quote Total (inc GST)</td><td class="price-col">' + fmt(H.totals.incGst) + '</td><td class="price-col">' + fmt(K.totals.incGst) + '</td></tr></table>' +
+    '<p style="font-size:11px;line-height:1.6;color:#555;margin:8px 0 0;">' + note + '</p></div>';
+}
+function commSpecDocHTML() {
+  if (!commSections().length) return '';
+  const esc = function(t){ return String(t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  return '<div class="section-heading"><span class="section-title">System Specifications</span></div>' +
+    '<div class="notes-box"><strong>Hychem Premium</strong><br>' + esc(HYCHEM_SPEC) + '</div>' +
+    '<div class="notes-box" style="margin-top:8px;"><strong>Sika Standard</strong><br>' + esc(S.commSikaSpec || 'Sika commercial epoxy floor and wall system').replace(/\n/g, '<br>') + '</div>';
+}
+function addCommArea() {
+  S.commAreas.push({ name:'', system:'Hychem Premium', floor:0, wall:0, coving:0, joints:0, jointType:'Hyflex NS', routing:false, qty:1 });
+  renderComm(); calcAll();
+}
+function rmCommArea(i) {
+  S.commAreas.splice(i, 1);
+  Object.keys(S.lineEdits || {}).forEach(function(k){ if (k.indexOf('comm-') === 0 && k !== 'comm-discount') delete S.lineEdits[k]; });
+  renderComm(); calcAll();
+}
+function setCommField(i, field, val) {
+  const a = S.commAreas[i]; if (!a) return;
+  a[field] = (field === 'name' || field === 'system' || field === 'jointType') ? val : field === 'routing' ? !!val : (field === 'qty' ? Math.max(1, parseInt(val, 10) || 1) : commNum(val));
+  if (field === 'system' || field === 'jointType' || field === 'routing') renderComm();
+  calcAll();
+}
+function setCommSystem(i, v) { setCommField(i, 'system', v); }
+function setCommJoint(i, v) { setCommField(i, 'jointType', v); }
+function setCommDiscount(field, val) {
+  if (!S.commDiscount) S.commDiscount = { type:'none', amount:0, label:'' };
+  S.commDiscount[field] = field === 'amount' ? commNum(val) : val;
+  if (field === 'type') renderComm();
+  calcAll();
+}
+function renderComm() {
+  const c = document.getElementById('commContainer');
+  if (!c) return;
+  const esc = function(t){ return String(t === undefined || t === null ? '' : t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+  let h = '';
+  S.commAreas.forEach(function(a, i) {
+    h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Area ' + (i + 1) + '</div><button class="btn-remove" onclick="rmCommArea(' + i + ')">✕</button></div>' +
+      '<div class="field"><label>Area Name</label><input type="text" value="' + esc(a.name) + '" placeholder="e.g. Kennel 1" oninput="setCommField(' + i + ',\'name\',this.value)"></div>' +
+      '<div class="field"><label>System</label>' + pills(COMM_SYSTEMS, a.system, 'setCommSystem', i) + '</div>' +
+      '<div class="row"><div class="field"><label>Floor m²</label><input type="number" min="0" step="0.1" value="' + (a.floor || 0) + '" oninput="setCommField(' + i + ',\'floor\',this.value)"></div>' +
+      '<div class="field"><label>Wall m²</label><input type="number" min="0" step="0.1" value="' + (a.wall || 0) + '" oninput="setCommField(' + i + ',\'wall\',this.value)"></div></div>' +
+      '<div class="row"><div class="field"><label>Coving lm</label><input type="number" min="0" step="0.1" value="' + (a.coving || 0) + '" oninput="setCommField(' + i + ',\'coving\',this.value)"></div>' +
+      '<div class="field"><label>Joints lm</label><input type="number" min="0" step="0.1" value="' + (a.joints || 0) + '" oninput="setCommField(' + i + ',\'joints\',this.value)"></div></div>' +
+      '<div class="field"><label>Joint Sealant</label>' + pills(Object.keys(PRICE.commJoint), a.jointType || 'Hyflex NS', 'setCommJoint', i) + '</div>' +
+      '<div class="toggle-row"><div class="toggle-label">Routing</div><div class="toggle-price">+$' + PRICE.commRouting + '/lm</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (a.routing ? 'checked' : '') + ' onchange="setCommField(' + i + ',\'routing\',this.checked)"><span class="toggle-slider"></span></label></div>' +
+      '<div class="field"><label>Identical Areas (quantity)</label><input type="number" min="1" step="1" value="' + commQty(a) + '" oninput="setCommField(' + i + ',\'qty\',this.value)"></div>' +
+      '<div class="comm-internal" id="commInt-' + i + '" style="font-size:11px;color:var(--muted);border-top:1px dashed var(--border);margin-top:6px;padding-top:6px;"></div>' +
+      '</div>';
+  });
+  h += '<button class="btn-add" onclick="addCommArea()">＋ Add Area</button>';
+  const d = S.commDiscount || { type:'none' };
+  h += '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;"><div class="field"><label>Discount</label><select id="commDiscType" onchange="setCommDiscount(\'type\',this.value)">' +
+    COMM_DISCOUNTS.map(function(o){ return '<option value="' + o[0] + '"' + (d.type === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
+  if (d.type === 'flat' || d.type === 'pct') h += '<div class="field"><label>' + (d.type === 'flat' ? 'Discount $' : 'Discount %') + '</label><input type="number" min="0" step="0.5" id="commDiscAmt" value="' + (d.amount || 0) + '" oninput="setCommDiscount(\'amount\',this.value)"></div>';
+  if (d.type !== 'none') h += '<div class="field"><label>Label on the PDF</label><input type="text" id="commDiscLabel" value="' + esc(d.label) + '" placeholder="' + esc(commDiscountLabel()) + '" oninput="setCommDiscount(\'label\',this.value)"></div>';
+  h += '</div>';
+  h += '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;"><div class="field"><label>Sika spec on the PDF</label><textarea rows="2" oninput="S.commSikaSpec=this.value">' + esc(S.commSikaSpec) + '</textarea></div>';
+  let m = {}; try { m = JSON.parse(localStorage.getItem('poxit_sika_mat') || '{}') || {}; } catch(e) {}
+  h += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Sika material cost (internal, saved on this device)</div><div class="row">' +
+    ['floor','wall','coving'].map(function(f){ return '<div class="field"><label>' + (f === 'coving' ? 'Coving $/lm' : (f === 'floor' ? 'Floor' : 'Walls') + ' $/m²') + '</label><input type="number" min="0" step="0.5" value="' + commNum(m[f]) + '" oninput="setSikaMat(\'' + f + '\',this.value)"></div>'; }).join('') + '</div></div>';
+  h += '<div id="commMarginTotal" style="font-size:12px;border-top:1px solid var(--border);margin-top:10px;padding-top:8px;"></div>';
+  c.innerHTML = h;
+  renderCommMargins();
+}
+// Internal only: material cost and margin per area and in total (never part of any document)
+function renderCommMargins() {
+  let price = 0, mat = 0;
+  (S.commAreas || []).forEach(function(a, i) {
+    const el = document.getElementById('commInt-' + i);
+    const p = commUnit(a, a.system).total * commQty(a), mc = commMaterial(a, a.system);
+    price += p; mat += mc;
+    if (el) el.innerHTML = 'Price ' + fmt(p) + ' · Material ' + fmt(mc) + ' · Margin ' + fmt(p - mc) + (p ? ' (' + Math.round((p - mc) / p * 100) + '%)' : '') +
+      (a.system === 'Sika Standard' && !commMatRates('Sika Standard').floor ? ' · <span style="color:var(--red);">Sika material cost not set</span>' : '');
+  });
+  const disc = (commSections().filter(function(x){ return x.key === 'comm-discount'; })[0] || { subtotal:0 }).subtotal;
+  const tot = document.getElementById('commMarginTotal');
+  if (tot) tot.innerHTML = price ? '<strong>Internal:</strong> price ' + fmt(price + disc) + (disc ? ' after discount' : '') + ' · material ' + fmt(mat) + ' · margin ' + fmt(price + disc - mat) + ' (' + Math.round((price + disc - mat) / (price + disc || 1) * 100) + '%)' : '';
+}
+// ===== EDITABLE SUMMARY: rename, describe, qty / unit / rate / amount, delete, custom lines =====
+function leNum(v) { if (v === '' || v === null || v === undefined) return null; const n = parseFloat(v); return isFinite(n) ? n : null; }
+function lineQtyText(qty, unit, rate) {
+  if (qty === null || qty === undefined) return '';
+  return qty + (unit ? ' ' + unit : '') + (rate !== null && rate !== undefined ? ' @ ' + fmt(rate) + (unit ? '/' + unit : '') : '');
+}
+function applyLineEdits(sections) {
+  const E = S.lineEdits || {};
+  const out = [];
+  sections.forEach(function(sec) {
+    const e = E[sec.key];
+    if (!e) { out.push(sec); return; }
+    if (e.deleted) return;
+    const x = Object.assign({}, sec, { addons: sec.addons.slice(), edited: true, originalSubtotal: sec.subtotal });
+    if (e.name !== undefined) { x.category = e.name; x.zoneName = ''; }
+    if (e.desc !== undefined) x.desc = e.desc;
+    const q = leNum(e.qty), r = leNum(e.rate), a = leNum(e.amount);
+    // a typed amount wins and the rate is worked back from it; otherwise qty × rate
+    if (q !== null) { x.qty = q; x.unit = e.unit || ''; x.rate = (a !== null && q) ? a / q : r; }
+    if (a !== null) x.subtotal = a; else if (q !== null && r !== null) x.subtotal = q * r;
+    x.qtyText = lineQtyText(x.qty, x.unit, x.rate);
+    out.push(x);
+  });
+  return out;
+}
+function editableKeysRemoved() {
+  const E = S.lineEdits || {};
+  return buildSectionsRaw().filter(function(sec){ return E[sec.key] && E[sec.key].deleted; });
+}
+function setLineEdit(key, field, val) {
+  if (!S.lineEdits) S.lineEdits = {};
+  const e = S.lineEdits[key] || (S.lineEdits[key] = {});
+  e[field] = val;
+  // a typed amount wins; typing a qty or rate goes back to qty × rate
+  if (field === 'qty' || field === 'rate') delete e.amount;
+  if (field === 'amount' || field === 'qty' || field === 'rate') delete S.overrides[key];
+  calcAll(); refreshLineFigures();
+}
+function deleteLine(key) { if (!S.lineEdits) S.lineEdits = {}; (S.lineEdits[key] = S.lineEdits[key] || {}).deleted = true; delete S.overrides[key]; leOpen.delete(key); calcAll(); forceRenderSummary(); }
+function restoreLine(key) { if (S.lineEdits && S.lineEdits[key]) delete S.lineEdits[key].deleted; calcAll(); forceRenderSummary(); }
+function resetLine(key) { if (S.lineEdits) delete S.lineEdits[key]; delete S.overrides[key]; calcAll(); forceRenderSummary(); }
+function setCustomLine(i, field, val) {
+  const ci = S.custom.items[i]; if (!ci) return;
+  if (field === 'desc' || field === 'note' || field === 'unit') ci[field] = val;
+  else {
+    ci[field] = leNum(val);
+    const q = leNum(ci.qty), r = leNum(ci.rate);
+    if (field === 'price') { ci.price = leNum(val) || 0; if (q) ci.rate = ci.price / q; }
+    else if (q !== null && r !== null) ci.price = q * r;
+  }
+  calcAll(); refreshLineFigures();
+}
+function addCustomLine() { S.custom.items.push({ desc:'', note:'', qty:null, unit:'', rate:null, price:0 }); leOpen.add('custom-' + (S.custom.items.length - 1)); renderCustomItems(); calcAll(); forceRenderSummary(); }
+function rmCustomLine(i) { S.custom.items.splice(i, 1); renderCustomItems(); calcAll(); forceRenderSummary(); }
+const leOpen = new Set();
+function toggleLineEditor(key) { if (leOpen.has(key)) leOpen.delete(key); else leOpen.add(key); forceRenderSummary(); }
+function forceRenderSummary() {
+  if (currentTab !== 'summary') return;
+  const sections = buildSections();
+  let customItems = 0; S.custom.items.forEach(function(c){ customItems += (c.price||0); });
+  let base = 0; sections.forEach(function(x){ base += effSub(x); });
+  renderSummary(sections, customItems, getAdjustment(base + customItems));
+}
+// Update the amounts shown while typing, without redrawing the inputs
+function refreshLineFigures() {
+  buildSections().forEach(function(sec) {
+    const el = document.getElementById('le-amt-' + sec.key); if (el) el.textContent = fmt(effSub(sec));
+  });
+  S.custom.items.forEach(function(ci, i) { const el = document.getElementById('le-amt-custom-' + i); if (el) el.textContent = fmt(ci.price || 0); });
+}
+function customRowsHTML() {
+  return S.custom.items.map(function(ci) {
+    if (!ci.price) return '';
+    const qt = lineQtyText(leNum(ci.qty), ci.unit, leNum(ci.rate));
+    return '<tr class="zone-row"><td><span class="zone-cat">' + (ci.desc || 'Custom Item') + '</span>' +
+      (ci.note ? '<br><span class="zone-desc">' + String(ci.note).replace(/\n/g, '<br>') + '</span>' : '') +
+      (qt ? '<br><span class="zone-desc">' + qt + '</span>' : '') +
+      '</td><td class="price-col zone-price">' + fmt(ci.price) + '</td></tr>';
+  }).join('');
+}
 function effSub(sec) {
   const ov = S.overrides[sec.key];
   return (ov !== undefined && ov !== null && ov !== '') ? parseFloat(ov) : sec.subtotal;
@@ -1947,7 +2238,7 @@ function getAdjustment(base) {
   if (t === 'markup_flat') return a;
   return 0;
 }
-function fmt(n) { return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fmt(n) { return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
 function calcAll() {
   const sections = buildSections();
@@ -1982,6 +2273,8 @@ function calcAll() {
   badge('badge-care', sumKeys('care-'));
   badge('badge-shine', sumKeys('shine-'));
   badge('badge-crack', sumKeys('cracks'));
+  badge('badge-comm', sections.filter(function(x){ return x.key.indexOf('comm-') === 0; }).reduce(function(t, x){ return t + effSub(x); }, 0));
+  if (currentTab === 'comm') renderCommMargins();
   badge('badge-spalling', (spallingEpoxySection() || {subtotal:0}).subtotal);
   badge('badge-spallCem', (spallingCemSection() || {subtotal:0}).subtotal);
   renderSpallingOpt();
@@ -2025,7 +2318,7 @@ function calcAll() {
   }
 
   if (currentTab === 'summary') {
-    if (!document.activeElement || !document.activeElement.classList.contains('override-input')) {
+    if (!document.activeElement || !(document.activeElement.classList.contains('override-input') || document.activeElement.classList.contains('le-input'))) {
       renderSummary(sections, customItems, adjustment);
     }
     const a = document.getElementById('summaryExGst'); if (a) a.textContent = fmt(finalTotal);
@@ -2042,27 +2335,74 @@ function renderSummary(sections, customItems, adjustment) {
   const div = document.getElementById('summaryLines');
   if (!div) return;
   renderDocName();
-  if (sections.length === 0 && customItems === 0) {
-    div.innerHTML = '<div class="text-muted" style="font-size:13px;padding:10px 0;">No items added yet.</div>';
+  const esc = function(t){ return String(t === undefined || t === null ? '' : t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+  const plain = function(t){ return String(t || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim(); };
+  const removed = editableKeysRemoved();
+  if (sections.length === 0 && !S.custom.items.length && !removed.length) {
+    div.innerHTML = '<div class="text-muted" style="font-size:13px;padding:10px 0;">No items added yet.</div>' +
+      '<button class="btn-add" onclick="addCustomLine()">＋ Add Line</button>';
     return;
   }
+  const field = function(label, inner, w) { return '<div class="field" style="' + (w ? 'max-width:' + w + ';' : '') + 'margin-bottom:6px;"><label>' + label + '</label>' + inner + '</div>'; };
   let html = sections.map(function(sec) {
-    const overridden = S.overrides[sec.key] !== undefined && S.overrides[sec.key] !== null && S.overrides[sec.key] !== '';
+    const k = sec.key, e = (S.lineEdits || {})[k] || {}, open = leOpen.has(k);
+    const legacy = S.overrides[k] !== undefined && S.overrides[k] !== null && S.overrides[k] !== '';
+    const name = sec.category + (sec.zoneName ? ' — ' + sec.zoneName : '');
     const addonHTML = sec.addons.map(function(a) {
       return showPricingBreakdown
         ? '<div class="summary-line" style="padding-left:14px;border-bottom:none;"><div class="s-label" style="color:var(--muted);font-size:12px;">↳ ' + a.label + '</div><div class="s-value" style="color:var(--muted);font-size:11px;">' + fmt(a.price) + '</div></div>'
         : '<div style="padding:2px 0 2px 14px;font-size:11px;color:var(--muted);">↳ ' + a.label + '</div>';
     }).join('');
+    let ed = '';
+    if (open) {
+      const sk = "'" + k + "'";
+      ed = '<div class="le-editor" style="background:var(--surface2,rgba(255,255,255,0.03));border:1px solid var(--border);border-radius:8px;padding:8px;margin:6px 0;">' +
+        field('Line name', '<input type="text" class="le-input" data-le="' + k + ':name" value="' + esc(plain(name)) + '" oninput="setLineEdit(' + sk + ',\'name\',this.value)">') +
+        field('Description', '<textarea rows="2" class="le-input" data-le="' + k + ':desc" oninput="setLineEdit(' + sk + ',\'desc\',this.value)">' + esc(plain(sec.desc)) + '</textarea>') +
+        '<div class="row">' +
+        field('Qty', '<input type="number" step="any" class="le-input" data-le="' + k + ':qty" value="' + (e.qty !== undefined && e.qty !== null ? e.qty : '') + '" placeholder="—" oninput="setLineEdit(' + sk + ',\'qty\',this.value)">', '80px') +
+        field('Unit', '<input type="text" class="le-input" data-le="' + k + ':unit" value="' + esc(e.unit) + '" placeholder="m², lm, ea" oninput="setLineEdit(' + sk + ',\'unit\',this.value)">', '90px') +
+        field('Rate $', '<input type="number" step="any" class="le-input" data-le="' + k + ':rate" value="' + (sec.rate !== undefined && sec.rate !== null ? +(+sec.rate).toFixed(4) : '') + '" placeholder="—" oninput="setLineEdit(' + sk + ',\'rate\',this.value)">', '100px') +
+        field('Amount $', '<input type="number" step="any" class="le-input" data-le="' + k + ':amount" value="' + +(+effSub(sec)).toFixed(2) + '" oninput="setLineEdit(' + sk + ',\'amount\',this.value)">', '110px') +
+        '</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        (sec.edited || legacy ? '<button class="btn-icon" style="font-size:11px;padding:5px 9px;" onclick="resetLine(' + sk + ')">↺ Undo edits</button>' : '') +
+        '<button class="btn-icon" style="font-size:11px;padding:5px 9px;color:var(--red);" onclick="deleteLine(' + sk + ')">🗑 Delete line</button></div></div>';
+    }
     return '<div class="summary-line" style="flex-direction:column;align-items:stretch;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-      '<div class="s-label" style="font-weight:600;">' + sec.category + (sec.zoneName ? ' — ' + sec.zoneName : '') + (overridden ? ' <span style="color:var(--red);font-size:10px;">EDITED</span>' : '') + '</div>' +
-      '<input type="number" class="override-input" placeholder="' + sec.subtotal.toFixed(0) + '" value="' + (overridden ? S.overrides[sec.key] : '') + '" step="0.5" min="0" oninput="setOverride(\'' + sec.key + '\', this.value)" style="border-color:' + (overridden ? 'var(--red)' : 'var(--border)') + ';">' +
-      '</div>' +
-      (sec.desc ? '<div style="font-size:10px;color:var(--muted);font-style:italic;padding:1px 0 3px;">' + sec.desc + '</div>' : '') +
-      addonHTML + '</div>';
+      '<div class="s-label" style="font-weight:600;">' + name + (sec.edited || legacy ? ' <span style="color:var(--red);font-size:10px;">EDITED</span>' : '') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;"><div class="s-value" id="le-amt-' + k + '">' + fmt(effSub(sec)) + '</div>' +
+      '<button class="btn-icon" style="font-size:11px;padding:4px 8px;" onclick="toggleLineEditor(\'' + k + '\')">' + (open ? 'Done' : '✎ Edit') + '</button></div></div>' +
+      (sec.desc && !open ? '<div style="font-size:10px;color:var(--muted);font-style:italic;padding:1px 0 3px;">' + sec.desc + '</div>' : '') +
+      (sec.qtyText && !open ? '<div style="font-size:10px;color:var(--muted);padding:1px 0 3px;">' + sec.qtyText + '</div>' : '') +
+      ed + (open ? '' : addonHTML) + '</div>';
   }).join('');
-  if (customItems > 0) html += '<div class="summary-line"><div class="s-label" style="font-weight:600;">✏️ Custom Items</div><div class="s-value">' + fmt(customItems) + '</div></div>';
+  html += S.custom.items.map(function(ci, i) {
+    const k = 'custom-' + i, open = leOpen.has(k);
+    let ed = '';
+    if (open) {
+      ed = '<div class="le-editor" style="border:1px solid var(--border);border-radius:8px;padding:8px;margin:6px 0;">' +
+        field('Line name', '<input type="text" class="le-input" value="' + esc(ci.desc) + '" placeholder="e.g. Call-out fee" oninput="setCustomLine(' + i + ',\'desc\',this.value)">') +
+        field('Description', '<textarea rows="2" class="le-input" oninput="setCustomLine(' + i + ',\'note\',this.value)">' + esc(ci.note) + '</textarea>') +
+        '<div class="row">' +
+        field('Qty', '<input type="number" step="any" class="le-input" value="' + (ci.qty !== undefined && ci.qty !== null ? ci.qty : '') + '" placeholder="—" oninput="setCustomLine(' + i + ',\'qty\',this.value)">', '80px') +
+        field('Unit', '<input type="text" class="le-input" value="' + esc(ci.unit) + '" placeholder="m², lm, ea" oninput="setCustomLine(' + i + ',\'unit\',this.value)">', '90px') +
+        field('Rate $', '<input type="number" step="any" class="le-input" value="' + (ci.rate !== undefined && ci.rate !== null ? +(+ci.rate).toFixed(4) : '') + '" placeholder="—" oninput="setCustomLine(' + i + ',\'rate\',this.value)">', '100px') +
+        field('Amount $', '<input type="number" step="any" class="le-input" value="' + (ci.price || 0) + '" oninput="setCustomLine(' + i + ',\'price\',this.value)">', '110px') +
+        '</div><div style="display:flex;justify-content:flex-end;"><button class="btn-icon" style="font-size:11px;padding:5px 9px;color:var(--red);" onclick="rmCustomLine(' + i + ')">🗑 Delete line</button></div></div>';
+    }
+    return '<div class="summary-line" style="flex-direction:column;align-items:stretch;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+      '<div class="s-label" style="font-weight:600;">' + (esc(ci.desc) || 'Custom line') + ' <span style="color:var(--muted);font-size:10px;">CUSTOM</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px;"><div class="s-value" id="le-amt-custom-' + i + '">' + fmt(ci.price || 0) + '</div>' +
+      '<button class="btn-icon" style="font-size:11px;padding:4px 8px;" onclick="toggleLineEditor(\'' + k + '\')">' + (open ? 'Done' : '✎ Edit') + '</button></div></div>' + ed + '</div>';
+  }).join('');
+  html += '<button class="btn-add" onclick="addCustomLine()">＋ Add Line</button>';
   if (adjustment !== 0) html += '<div class="summary-line"><div class="s-label" style="font-weight:600;">' + (adjustment < 0 ? '➖ Discount' : '➕ Markup') + '</div><div class="s-value" style="color:' + (adjustment<0?'var(--red)':'var(--green)') + ';">' + (adjustment<0?'-':'+') + fmt(Math.abs(adjustment)) + '</div></div>';
+  if (removed.length) html += '<div style="margin-top:8px;font-size:11px;color:var(--muted);">Deleted lines: ' + removed.map(function(sec){
+    return '<span style="display:inline-block;margin:2px 6px 2px 0;">' + plain(sec.category + (sec.zoneName ? ' ' + sec.zoneName : '')) + ' <button class="btn-icon" style="font-size:10px;padding:2px 6px;" onclick="restoreLine(\'' + sec.key + '\')">Restore</button></span>';
+  }).join('') + '</div>';
   div.innerHTML = html;
 }
 function setOverride(key, val) {
@@ -2204,7 +2544,8 @@ function scopeRowsHTML(sections, withPrices) {
     }).join('');
     return '<tr class="zone-row"><td><span class="zone-cat">' + sec.category + '</span>' +
       (sec.zoneName ? '<span class="zone-name"> — ' + sec.zoneName + '</span>' : '') +
-      (sec.desc ? '<br><span class="zone-desc">' + sec.desc + '</span>' : '') + '</td>' +
+      (sec.desc ? '<br><span class="zone-desc">' + String(sec.desc).replace(/\n/g, '<br>') + '</span>' : '') +
+      (sec.qtyText ? '<br><span class="zone-desc">' + sec.qtyText + '</span>' : '') + '</td>' +
       '<td class="price-col zone-price">' + fmt(effSub(sec)) + '</td></tr>' + addonRows;
   }).join('<tr class="spacer-row"><td colspan="2"></td></tr>');
 }
@@ -2492,9 +2833,7 @@ function generatePDF() {
   const total = base + customItems + adjustment;
   const gst = total*0.1, incGst = total+gst;
   let rows = scopeRowsHTML(sections, showPricingBreakdown);
-  S.custom.items.forEach(function(ci) {
-    if (ci.price > 0) rows += '<tr class="zone-row"><td><span class="zone-cat">✏️ ' + (ci.desc || 'Custom Item') + '</span></td><td class="price-col zone-price">' + fmt(ci.price) + '</td></tr>';
-  });
+  rows += customRowsHTML();
   if (adjustment !== 0) rows += '<tr class="zone-row"><td><span class="zone-cat">' + (adjustment<0?'Discount':'Markup') + '</span></td><td class="price-col zone-price">' + (adjustment<0?'-':'+') + fmt(Math.abs(adjustment)) + '</td></tr>';
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
     '<title>' + docFileName('Quote', c.ref) + '</title><style>' + docCSS() + '</style></head><body>' +
@@ -2513,8 +2852,9 @@ function generatePDF() {
     '<table class="totals-table">' +
     '<tr class="total-ex"><td>Total (Ex-GST)</td><td class="price-col">' + fmt(total) + '</td></tr>' +
     '<tr class="total-gst"><td>GST (10%)</td><td class="price-col">' + fmt(gst) + '</td></tr>' +
-    '<tr class="total-inc"><td>TOTAL AMOUNT DUE (Inc GST)</td><td class="price-col">' + fmt(incGst) + '</td></tr></table>' +
+    '<tr class="total-inc"><td>Quote Total (Inc GST)</td><td class="price-col">' + fmt(incGst) + '</td></tr></table>' +
     '<div class="disclaimer">This price is based on visible and reasonably assessable conditions at the time of quoting only. Price does not account for hidden subsurface conditions, scope changes, or variations.</div>' +
+    commComparisonDocHTML() +
     spallingOptionsDocHTML() +
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Payment Terms</span></div>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;">All quotes are valid for <strong>30 days</strong> from the date of issue. A <strong>50% non-refundable deposit</strong> is required to confirm booking and reserve the job date. Remaining 50% is due on <strong>completion of work before Poxit leaves the site</strong>.</p>' +
@@ -2522,6 +2862,7 @@ function generatePDF() {
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showQuote) +
     (c.clientNotes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
     (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
+    commSpecDocHTML() +
     '</div>' + docFooter() +
     '<scr' + 'ipt>window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
   docCtx = { kind:'Quote', html: html };
@@ -2545,9 +2886,7 @@ function buildInvoice(invRef) {
   const total = base + customItems + adjustment;
   const gst = total*0.1, incGst = total+gst, deposit = incGst*0.5;
   let rows = scopeRowsHTML(sections, false);
-  S.custom.items.forEach(function(ci) {
-    if (ci.price > 0) rows += '<tr class="zone-row"><td><span class="zone-cat">✏️ ' + (ci.desc || 'Custom Item') + '</span></td><td class="price-col zone-price">' + fmt(ci.price) + '</td></tr>';
-  });
+  rows += customRowsHTML();
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
     '<title>' + invTitles.deposit + '</title><style>' + docCSS() + '</style></head><body>' +
     docHeader('TAX INVOICE') +
@@ -2606,6 +2945,7 @@ function quoteServiceNames(payload) {
       if (ex.pwJob && ex.pwZones && ex.pwZones.length) names.push('Pressure Washing');
       if (ex.pwPlan && ex.pwPlan.enabled && ex.pwPlan.area > 0) names.push('Pressure Clean Plan');
       if (ex.lmLines && ex.lmLines.length) names.push('Line Marking');
+      if (ex.commAreas && ex.commAreas.length) names.push('Commercial & Chemical Resistant Systems');
       if (ex.skim && ex.skim.area > 0) names.push('Skim Coat');
       if (ex.cancerPatches && ex.cancerPatches.length) names.push('Concrete Cancer');
       if (ex.demo && Object.keys(ex.demo).some(function(k){ return ex.demo[k] > 0; })) names.push('Demolition');
@@ -2618,7 +2958,7 @@ function quoteServiceLabel(payload) {
   if (!names.length) return '';
   return names.length > 3 ? names.slice(0,3).join(' + ') + ' +' + (names.length-3) : names.join(' + ');
 }
-const DOC_SHORT = { 'Epoxy Flooring':'Epoxy', 'Cleaning & Sealing':'Clean and Seal', 'Grind & Seal':'Grind and Seal', 'Concrete Grinding':'Grinding', 'Polished Concrete':'Polished Concrete', 'Care Plan Refresh':'Care Plan', 'Clean Grip & Shine':'Grip and Shine', 'Pressure Clean Plan':'Clean Plan', 'Concrete Cancer':'Concrete Repair' };
+const DOC_SHORT = { 'Commercial & Chemical Resistant Systems':'Commercial System', 'Epoxy Flooring':'Epoxy', 'Cleaning & Sealing':'Clean and Seal', 'Grind & Seal':'Grind and Seal', 'Concrete Grinding':'Grinding', 'Polished Concrete':'Polished Concrete', 'Care Plan Refresh':'Care Plan', 'Clean Grip & Shine':'Grip and Shine', 'Pressure Clean Plan':'Clean Plan', 'Concrete Cancer':'Concrete Repair' };
 function docJobLabel() {
   const names = quoteServiceNames({ state:S });
   if (!names.length) return '';
@@ -2729,7 +3069,7 @@ function quoteSnapshot() {
              amount: r2(effSub(sec)), addons: sec.addons.map(function(a){ return cleanSnapText(a.label); }) };
   });
   S.custom.items.forEach(function(ci) {
-    if (ci.price > 0) lines.push({ category: cleanSnapText(ci.desc) || 'Custom Item', zoneName:'', desc:'', amount: r2(ci.price), addons: [] });
+    if (ci.price) lines.push({ category: cleanSnapText(ci.desc) || 'Custom Item', zoneName:'', desc: cleanSnapText([ci.note, lineQtyText(leNum(ci.qty), ci.unit, leNum(ci.rate))].filter(Boolean).join(' · ')), amount: r2(ci.price), addons: [] });
   });
   const so = spallingOptions();
   const options = so ? so.options.map(function(x){ return { option: x.n, name: x.name, exGst: r2(x.price), quoteIncGst: r2(x.totals.incGst), inTotal: x.n === so.include }; }) : [];
