@@ -82,7 +82,7 @@ function doPost(e) {
     if (body.action === 'quoteMeta') out = PXI_quoteMeta_(body);
     else if (body.action === 'savePdf') out = PXI_savePdf_(body);
     else if (body.action === 'nextInvoice') out = PXI_nextInvoice_(body);
-    else out = { status: 'error', message: 'Unknown action' };
+    else out = (typeof PXA_route_ === 'function' && PXA_route_(body)) || { status: 'error', message: 'Unknown action' };
   } catch (err) {
     out = { status: 'error', message: String(err && err.message || err) };
   }
@@ -96,6 +96,7 @@ function PXI_quoteMeta_(b) {
   if (!row) return { status: 'not_found', message: 'No quote row with key ' + b.key };
   PXI_writeQuoteTotals_(sh, row, b.key, b.entity, b.location, b.snapshot || {});
   PXI_mirrorFiles_(sh, row, b.key); // an Update re-adds the row, so put the PDF links back on it
+  if (typeof PXA_restoreStatus_ === 'function') PXA_restoreStatus_(sh, row);
   return { status: 'ok', row: row };
 }
 
@@ -197,7 +198,7 @@ function PXI_findByName_(folderId, number, client) {
     if (f.isTrashed() || f.getMimeType() !== 'application/pdf') continue;
     var n = f.getName(), nl = n.toLowerCase().replace(/\s+/g, ' ');
     if (n.indexOf(number) < 0) continue;
-    if (c && nl.indexOf(c) !== 0) continue;
+    if (c && nl.indexOf(c) < 0) continue; // client anywhere in the name (old and new naming)
     if (!best || f.getLastUpdated() > best.getLastUpdated()) best = f;
   }
   return best;
