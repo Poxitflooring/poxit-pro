@@ -3665,6 +3665,7 @@ const INVOICE_TYPES = { deposit:'Deposit', progress:'Progress', final:'Final', f
 // The invoice document. Pure, so the sheet's Invoice Requests build the same invoice.
 function invoiceDocHtml(stage, invNo, opts) {
   opts = opts || {};
+  if (!/^INV-\d{4}-\d+$/.test(String(invNo || ''))) throw new Error('Invoice number missing (got "' + invNo + '"). Nothing was made.');
   const k = invoiceCalc(stage, opts);
   const m = k.money, c = S.client;
   const client = (c.first + ' ' + c.last).trim() || '—';
@@ -3722,7 +3723,7 @@ function invoiceDocHtml(stage, invNo, opts) {
     '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invNo + '</strong></div>' +
     (m.sections.some(function(x){ return x.key === 'spallCem'; }) ? cemWarrantyHTML() : '') +
     (opts.notes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + String(opts.notes).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div>' : '') +
-    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
+    '<div class="disclaimer">Payment is due as per the terms above. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
     '</div>' + docFooter() + '</body></html>';
   return { html: html, calc: k, title: title, type: INVOICE_TYPES[stage] };
 }
@@ -4202,11 +4203,15 @@ function blobToBase64(blob) {
 function nextInvoiceRef() {
   const localLast = parseInt(localStorage.getItem('poxit_inv_num') || '0') || 0;
   return postToSheet({ action:'nextInvoice', localLast: localLast }, 8000).then(function(j) {
-    localStorage.setItem('poxit_inv_num', j.number);
+    const n = parseInt(j && j.number, 10);
+    if (!(n > 0) || !/^INV-\d{4}-\d+$/.test(String(j.ref || ''))) throw new Error('no number');
+    localStorage.setItem('poxit_inv_num', n);
     return { ref: j.ref, central: true };
   }).catch(function() {
+    // Offline: this device's counter. The sheet's counter skips any number used here once it is back.
     const n = localLast + 1;
     localStorage.setItem('poxit_inv_num', n);
+    alert('Could not reach the sheet for the next invoice number, so this one uses this device\'s counter: INV-' + new Date().getFullYear() + '-' + ('00' + n).slice(-3) + '. Check it before sending.');
     return { ref: 'INV-' + new Date().getFullYear() + '-' + ('00' + n).slice(-3), central: false };
   });
 }
@@ -4219,9 +4224,19 @@ function nextQuoteRef() {
     localStorage.setItem('poxit_quote_num', j.number);
     return { ref: j.ref, central: true };
   }).catch(function() {
-    const n = localLast + 1;
-    localStorage.setItem('poxit_quote_num', n);
-    return { ref: 'PXT-' + new Date().getFullYear() + '-' + ('00' + n).slice(-3), central: false };
+    // Fallback: carry on from the highest ref already saved in the sheet (never restart at 001 on a new device)
+    return fetch(SHEET_URL + '?action=load').then(function(r){ return r.json(); }).catch(function(){ return null; }).then(function(data) {
+      const yr = new Date().getFullYear();
+      let max = localLast;
+      const list = data && (data.quotes || data.data || data) || [];
+      (Array.isArray(list) ? list : []).forEach(function(q) {
+        const m = String((q && (q.ref || (q.client && q.client.ref))) || '').match(new RegExp('^PXT-' + yr + '-(\\d+)$'));
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+      });
+      const n = max + 1;
+      localStorage.setItem('poxit_quote_num', n);
+      return { ref: 'PXT-' + yr + '-' + ('00' + n).slice(-3), central: false };
+    });
   });
 }
 const INVOICE_STAGE_TYPE = { deposit:'Deposit', final:'Final', full:'Full Payment', paid:'Paid' };

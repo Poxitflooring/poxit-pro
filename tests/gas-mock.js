@@ -10,6 +10,7 @@ function makeEnv(opts) {
   const props = {};
   const triggers = [];
   const logs = [];
+  const mail = { me: 'Dominic@poxitflooring.com.au', aliases: [], drafts: {}, sent: [], searches: [], sentThreads: [] };
   const TZ_OFFSET_H = 10; // Brisbane, no daylight saving
 
   function Blob(data, mime, name) {
@@ -34,6 +35,7 @@ function makeEnv(opts) {
   File.prototype.setTrashed = function (t) { this.trashed = t; return this; };
   File.prototype.getMimeType = function () { return this.mime; };
   File.prototype.getLastUpdated = function () { return this.updated; };
+  File.prototype.getBlob = function () { return new Blob(this.data, this.mime, this.name); };
 
   function folder(id) {
     if (!folders[id]) folders[id] = { id: id, name: 'Folder ' + id };
@@ -119,7 +121,31 @@ function makeEnv(opts) {
       formatDate: formatDate,
       getUuid: function () { return crypto.randomUUID(); }
     },
-    PropertiesService: { getScriptProperties: function () { return { getProperty: function (k) { return props[k] === undefined ? null : props[k]; }, setProperty: function (k, v) { props[k] = String(v); } }; } },
+    PropertiesService: { getScriptProperties: function () { return { getProperty: function (k) { return props[k] === undefined ? null : props[k]; }, setProperty: function (k, v) { props[k] = String(v); }, deleteProperty: function (k) { delete props[k]; } }; } },
+    Session: { getEffectiveUser: function () { return { getEmail: function () { return mail.me; } }; } },
+    GmailApp: {
+      search: function (q) { mail.searches.push(q); return mail.sentThreads; },
+      getAliases: function () { return mail.aliases.slice(); },
+      createDraft: function (to, subject, body, o) {
+        const d = { id: 'r' + (++idSeq), to: to, subject: subject, body: body, opts: o || {}, sent: false };
+        mail.drafts[d.id] = d;
+        const msg = { getId: function () { return 'm' + d.id; }, getSubject: function () { return d.subject; }, getTo: function () { return d.to; },
+          getCc: function () { return (d.opts.cc || ''); }, getAttachments: function () { return d.opts.attachments || []; } };
+        return { getId: function () { return d.id; }, getMessage: function () { return msg; },
+          send: function () { if (d.sent) throw new Error('already sent'); d.sent = true; mail.sent.push(d);
+            return { getId: function () { return 'sent-' + d.id; }, getDate: function () { return new Date(); } }; } };
+      },
+      getDraft: function (id) { const d = mail.drafts[id]; if (!d || d.sent) throw new Error('not found'); return this._wrap(d); },
+      _wrap: function (d) {
+        const msg = { getId: function () { return 'm' + d.id; }, getSubject: function () { return d.subject; }, getTo: function () { return d.to; },
+          getCc: function () { return (d.opts.cc || ''); }, getAttachments: function () { return d.opts.attachments || []; } };
+        return { getId: function () { return d.id; }, getMessage: function () { return msg; },
+          send: function () { if (d.sent) throw new Error('already sent'); d.sent = true; mail.sent.push(d);
+            return { getId: function () { return 'sent-' + d.id; }, getDate: function () { return new Date(); } }; } };
+      },
+      sendEmail: function () { throw new Error('GmailApp.sendEmail must never be called'); }
+    },
+    MailApp: { sendEmail: function () { throw new Error('MailApp must never be called'); } },
     LockService: { getScriptLock: function () { return { waitLock: function () {}, tryLock: function () { return true; }, releaseLock: function () {} }; } },
     ContentService: { createTextOutput: function (s) { return { s: s, setMimeType: function () { return this; }, getContent: function () { return s; } }; }, MimeType: { JSON: 'json' } },
     ScriptApp: {
@@ -130,6 +156,6 @@ function makeEnv(opts) {
     },
     Logger: { log: function (m) { logs.push(String(m)); } }
   };
-  return { globals: g, files: files, folders: folders, props: props, sheets: sheets, triggers: triggers, logs: logs, Sheet: Sheet };
+  return { mail: mail, globals: g, files: files, folders: folders, props: props, sheets: sheets, triggers: triggers, logs: logs, Sheet: Sheet };
 }
 module.exports = { makeEnv: makeEnv };

@@ -40,7 +40,8 @@ var PXA = {
   API_HEADERS: ['Action', 'Request (JSON)', 'Status', 'Quote Ref', 'Quote Key', 'Total ex GST', 'Total inc GST',
                 'File ID', 'Link', 'Result (JSON)', 'Message', 'Processed At'],
   STATUS_COL: 18,          // Sheet1 column R: Quoted / Accepted / Declined / Invoiced / Paid (free text)
-  ACTIONS: { createQuote: 1, getQuoteByRef: 1, listQuotes: 1, updateQuote: 1, regeneratePdf: 1 },
+  ACTIONS: { createQuote: 1, getQuoteByRef: 1, listQuotes: 1, updateQuote: 1, regeneratePdf: 1,
+             draftEmail: 1, sendDraft: 1, renumberInvoice: 1, showInvoiceNumbers: 1, setNextInvoiceNo: 1 },
   FLOOR_TYPES: { epoxy: 1, tinted: 1, seal: 1, gs: 1, aqua: 1, grind: 1, polished: 1, care: 1, shine: 1 }
 };
 
@@ -61,6 +62,11 @@ function PXA_api_(action, b) {
   if (action === 'listQuotes') return PXA_listQuotes_(b);
   if (action === 'updateQuote') return PXA_updateQuote_(b);
   if (action === 'regeneratePdf') return PXA_regeneratePdf_(b);
+  if (action === 'draftEmail') return PXE_draftEmail_(b);
+  if (action === 'sendDraft') return PXE_sendDraft_(b);
+  if (action === 'renumberInvoice') return PXI_renumberInvoice_(String(b.invoiceNo || b.invNo || ''), b.newNo);
+  if (action === 'showInvoiceNumbers') return PXI_showInvoiceNumbers();
+  if (action === 'setNextInvoiceNo') return { status: 'ok', next: PXI_setNextInvoiceNo(b.number || b.n) };
   return { status: 'error', message: 'Unknown action ' + action };
 }
 
@@ -319,8 +325,12 @@ function PXA_serverHtml_(html) {
   var h = String(html || '');
   h = h.replace(/<script[\s\S]*?<\/script>/gi, '');
   h = h.replace(/@import url\([^)]*\);/g, '');
+  h = h.replace(/<div class="doc-header">([\s\S]*?)<\/div><div class="gold-rule"><\/div>/,
+    '<table class="doc-header-t" width="100%" cellpadding="0" cellspacing="0"><tr><td class="doc-header" bgcolor="#0a0a0a" align="center">$1</td></tr>' +
+    '<tr><td class="gold-rule" bgcolor="#0ABAB5" height="4"></td></tr></table>');
+  h = h.replace(/<div class="inv-badge">([\s\S]*?)<\/div>/, '<table cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr><td class="inv-badge" bgcolor="#0ABAB5">$1</td></tr></table>');
   h = h.replace(/<div class="client-row"><div class="client-label">([\s\S]*?)<\/div><div class="client-value">([\s\S]*?)<\/div><\/div>/g,
-    '<tr><td class="client-label">$1</td><td class="client-value">$2</td></tr>');
+    '<tr><td class="client-label">$1</td><td class="client-cell"><div class="client-value">$2</div></td></tr>');
   h = h.replace(/<div class="client-box">((?:<tr>[\s\S]*?<\/tr>)+)<\/div>/g, '<table class="client-box">$1</table>');
   h = h.replace(/<div class="payment-row( due)?"><div>([\s\S]*?)<\/div><div class="p-amount"([^>]*)>([\s\S]*?)<\/div><\/div>/g,
     '<table class="payment-row$1"><tr><td>$2</td><td class="p-amount"$3>$4</td></tr></table>');
@@ -329,11 +339,14 @@ function PXA_serverHtml_(html) {
   var css = 'body{font-family:Arial,Helvetica,sans-serif;max-width:none;}' +
     '.logo-main,.logo-sub,.doc-type-gold,.doc-type-white,.section-num,.section-title,.zone-cat,.zone-name,.zone-price,.payment-title,.inv-badge,.client-label,.totals-table .price-col{font-family:Arial,Helvetica,sans-serif;}' +
     '.client-box{width:100%;border-collapse:collapse;border:1px solid #ccc;margin-bottom:24px;}' +
-    '.client-box td{padding:6px 14px;border-bottom:1px solid #e8e8e8;vertical-align:top;}' +
-    '.client-label{font-weight:bold;font-size:11px;width:150px;}.client-value{font-size:12px;color:#333;}' +
+    '.client-box td{padding:7px 14px;border-bottom:1px solid #e8e8e8;vertical-align:bottom;}' +
+    '.client-label{font-weight:bold;font-size:11px;width:140px;}.client-value{display:block;font-size:12px;color:#333;border-bottom:1px solid #999;padding-bottom:1px;min-height:16px;}' +
     '.section-heading{display:block;}.section-num{padding-right:6px;}.section-title{text-transform:uppercase;}' +
-    '.payment-row{width:100%;border-collapse:collapse;border-bottom:1px solid #f0f0f0;}.payment-row td{padding:5px 0;font-size:12px;}' +
-    '.payment-row .p-amount{text-align:right;font-weight:bold;}.terms-select{display:none;}';
+    'table.payment-row{display:table;width:100%;border-collapse:collapse;border-bottom:1px solid #f0f0f0;}.payment-row td{padding:5px 0;font-size:12px;}' +
+    '.payment-row .p-amount{text-align:right;font-weight:bold;}.terms-select{display:none;}' +
+    '.doc-header-t{border-collapse:collapse;width:100%;}.doc-header-t td.doc-header{background:#0a0a0a;padding:32px 40px 24px;text-align:center;}' +
+    '.doc-header-t td.gold-rule{background:#0ABAB5;height:4px;line-height:4px;font-size:1px;padding:0;}' +
+    'td.inv-badge{display:table-cell;background:#0ABAB5;color:#fff;padding:4px 12px;}';
   return h.replace('</style>', css + '</style>');
 }
 
@@ -513,4 +526,151 @@ function PXA_setPath_(obj, path, value) {
     o = o[parts[i]];
   }
   o[parts[parts.length - 1]] = value;
+}
+
+// =====================================================================
+//  EMAIL (draftEmail, sendDraft). The ONLY place this project sends mail:
+//  sendDraft sends one draft that draftEmail made, after Dom approves it.
+// =====================================================================
+var PXE = {
+  FROM: 'dominic@poxitflooring.com.au',
+  NAME: 'Dominic Amsteins',
+  SIG_PROP: 'PXE_SIGNATURE',
+  LOG_TAB: 'Email Log',
+  LOG_HEADERS: ['Date', 'Quote Ref', 'Doc', 'To', 'Cc', 'Subject', 'Draft ID', 'Invoice No', 'Message ID', 'Attachment'],
+  EMAILED_COL: 19,   // Sheet1 column S: date the quote or invoice was last emailed
+  DEFAULT_SIGNATURE: 'Dominic Amsteins\nDirector\nPoxit Flooring Pty Ltd\n0478 495 995\nDominic@poxitflooring.com.au\npoxitflooring.com.au\nGold Coast, Australia'
+};
+
+// Run once from the editor: makes the Email Log tab and stores the signature (edit PXE.DEFAULT_SIGNATURE or the property later)
+function PXE_setup() {
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty(PXE.SIG_PROP)) props.setProperty(PXE.SIG_PROP, PXE.DEFAULT_SIGNATURE);
+  var ss = PXI_ss_();
+  var log = ss.getSheetByName(PXE.LOG_TAB) || ss.insertSheet(PXE.LOG_TAB);
+  log.getRange(1, 1, 1, PXE.LOG_HEADERS.length).setValues([PXE.LOG_HEADERS]).setFontWeight('bold').setBackground('#0ABAB5').setFontColor('#ffffff');
+  log.setFrozenRows(1);
+  var from = PXE_fromAddress_();
+  Logger.log('Email ready. Sending as ' + from.address + (from.alias ? ' (alias)' : '') + '. Signature:\n' + props.getProperty(PXE.SIG_PROP));
+  return 'Email setup done';
+}
+function PXE_setSignature(text) {
+  if (!text) throw new Error('Give the signature text');
+  PropertiesService.getScriptProperties().setProperty(PXE.SIG_PROP, String(text));
+  return 'Signature saved';
+}
+
+// The account must be Dominic@poxitflooring.com.au, or have it as a send-as alias. Never anything else.
+function PXE_fromAddress_() {
+  var me = '';
+  try { me = String(Session.getEffectiveUser().getEmail() || ''); } catch (e) {}
+  if (me.toLowerCase() === PXE.FROM) return { address: me, alias: false };
+  var aliases = [];
+  try { aliases = GmailApp.getAliases() || []; } catch (e) {}
+  for (var i = 0; i < aliases.length; i++) if (String(aliases[i]).toLowerCase() === PXE.FROM) return { address: aliases[i], alias: true };
+  throw new Error('This script runs as ' + (me || 'an unknown account') + ', and ' + PXE.FROM + ' is not one of its send-as addresses. Nothing was drafted.');
+}
+
+function PXE_list_(v) {
+  if (!v) return [];
+  var a = Array.isArray(v) ? v : String(v).split(/[,;]/);
+  return a.map(function (x) { return String(x).trim(); }).filter(Boolean);
+}
+var PXE_EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[A-Za-z]{2,}$/;
+
+// The latest PDF for the quote or one of its invoices, from Drive
+function PXE_findPdf_(b) {
+  var quote = PXI_findQuoteForRequest_(String(b.ref || b.key || '').trim(), String(b.client || '').trim());
+  var doc = String(b.doc || '').toLowerCase();
+  var fileId = '', invNo = '';
+  if (doc === 'quote') {
+    var link = PXI_ss_().getSheetByName(PXI.QUOTES_TAB).getRange(quote.row, PXI.Q.QUOTE_LINK).getValue();
+    fileId = PXA_fileIdFromLink_(link);
+    if (!fileId) {
+      var hit = PXI_findFileEntry_(PXI_ss_().getSheetByName(PXI.FILES_TAB), 'Quote', quote.key);
+      fileId = hit ? hit.fileId : '';
+    }
+    if (!fileId) throw new Error('No quote PDF in Drive for ' + quote.ref + ' yet. Run regeneratePdf first.');
+  } else if (doc === 'invoice') {
+    var list = PXI_invoicesForKey_(quote.key);
+    var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
+    var want = String(b.invoiceNo || '').trim();
+    if (want) {
+      var r = PXI_findInvoiceRow_(inv, want);
+      if (!r) throw new Error('No invoice ' + want + ' in the Invoices tab.');
+      var row = inv.getRange(r, 1, 1, PXI.INV_HEADERS.length).getValues()[0];
+      if (String(row[2]) !== String(quote.key)) throw new Error(want + ' belongs to ' + row[1] + ', not ' + quote.ref + '.');
+      fileId = String(row[13]); invNo = want;
+    } else {
+      if (!list.length) throw new Error('No invoices for ' + quote.ref + ' yet.');
+      var lastInv = list[list.length - 1];
+      var rr = PXI_findInvoiceRow_(inv, lastInv.invNo);
+      fileId = String(inv.getRange(rr, 14).getValue()); invNo = lastInv.invNo;
+    }
+    if (!fileId) throw new Error('No PDF in Drive for ' + invNo + '.');
+  } else {
+    throw new Error('doc must be "quote" or "invoice".');
+  }
+  var file = DriveApp.getFileById(fileId);
+  if (file.isTrashed()) throw new Error('The PDF for ' + (invNo || quote.ref) + ' is in the Drive bin.');
+  if (file.getMimeType() !== 'application/pdf') throw new Error('The file for ' + (invNo || quote.ref) + ' is not a PDF.');
+  return { quote: quote, file: file, invNo: invNo, doc: doc };
+}
+
+function PXE_draftEmail_(b) {
+  var to = PXE_list_(b.to), cc = PXE_list_(b.cc);
+  if (!to.length) throw new Error('"to" needs at least one email address.');
+  to.concat(cc).forEach(function (a) { if (!PXE_EMAIL_RE.test(a)) throw new Error('"' + a + '" is not a valid email address.'); });
+  var subject = String(b.subject || '').trim();
+  if (!subject) throw new Error('"subject" is required.');
+  var body = String(b.body || '').replace(/\r\n/g, '\n').trim();
+  if (!body) throw new Error('"body" is required (include the sign off).');
+  var from = PXE_fromAddress_();
+  var pdf = PXE_findPdf_(b);
+  var sig = PropertiesService.getScriptProperties().getProperty(PXE.SIG_PROP) || PXE.DEFAULT_SIGNATURE;
+  var full = body + '\n\n' + sig;
+  var opts = { attachments: [pdf.file.getBlob().setName(pdf.file.getName())], name: PXE.NAME };
+  if (cc.length) opts.cc = cc.join(',');
+  if (from.alias) opts.from = from.address;
+  var draft = GmailApp.createDraft(to.join(','), subject, full, opts);
+  var msg = draft.getMessage();
+  return { status: 'ok', draftId: draft.getId(), messageId: msg.getId(), from: from.address, to: to, cc: cc, subject: subject, body: full,
+           attachment: pdf.file.getName(), fileId: pdf.file.getId(), ref: pdf.quote.ref, doc: pdf.doc, invoiceNo: pdf.invNo,
+           gmailLink: 'https://mail.google.com/mail/u/0/#drafts?compose=' + msg.getId() };
+}
+
+// Sends exactly the draft named, nothing else
+function PXE_sendDraft_(b) {
+  var id = String(b.draftId || '').trim();
+  if (!id) throw new Error('"draftId" is required.');
+  var draft;
+  try { draft = GmailApp.getDraft(id); } catch (e) { draft = null; }
+  if (!draft) throw new Error('No draft ' + id + ' (it may already have been sent or deleted).');
+  PXE_fromAddress_();
+  var before = draft.getMessage();
+  var subject = before.getSubject(), to = before.getTo(), cc = before.getCc();
+  var att = (before.getAttachments() || []).map(function (a) { return a.getName(); }).join(', ');
+  var sent = draft.send();
+  var when = sent.getDate ? sent.getDate() : new Date();
+  // which quote / invoice this was: from the attachment name
+  var ref = '', invNo = '', doc = '';
+  var m = att.match(/INV-\d{4}-\d+/); if (m) { invNo = m[0]; doc = 'invoice'; }
+  var qm = att.match(/PXT-\d{4}-\d+/); if (qm) { ref = qm[0]; if (!doc) doc = 'quote'; }
+  var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
+  var key = '';
+  if (invNo) {
+    var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
+    var r = PXI_findInvoiceRow_(inv, invNo);
+    if (r) { var row = inv.getRange(r, 1, 1, 3).getValues()[0]; ref = String(row[1]); key = String(row[2]); }
+  }
+  var stamp = PXI_now_();
+  try {
+    var found = key ? { key: key } : (ref ? PXI_findQuoteForRequest_(ref, '') : null);
+    var qrow = found ? PXI_findQuoteRowByKey_(qs, found.key) : 0;
+    if (qrow) qs.getRange(qrow, PXE.EMAILED_COL).setValue(stamp);
+  } catch (e) { /* logged below either way */ }
+  var log = PXI_ss_().getSheetByName(PXE.LOG_TAB);
+  if (!log) { PXE_setup(); log = PXI_ss_().getSheetByName(PXE.LOG_TAB); }
+  log.getRange(log.getLastRow() + 1, 1, 1, PXE.LOG_HEADERS.length).setValues([[stamp, ref, doc, to, cc, subject, id, invNo, sent.getId(), att]]);
+  return { status: 'ok', messageId: sent.getId(), sentAt: Utilities.formatDate(when, PXI.TZ, 'dd/MM/yyyy h:mm a'), to: to, cc: cc, subject: subject, ref: ref, invoiceNo: invNo };
 }

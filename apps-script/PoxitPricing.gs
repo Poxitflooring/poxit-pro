@@ -2,7 +2,7 @@
 //  POXIT PRICING  (file: PoxitPricing.gs)
 //  GENERATED from the quote tool (index.html) by tools/build-pricing.js.
 //  Do not edit by hand: paste the new version whenever the tool's pricing changes.
-//  Pricing version: e7035c58dc93
+//  Pricing version: a9eb19e3645d
 // =====================================================================
 var PXP = (function () {
   // No screen on the server: anything that would touch it is never called here
@@ -1443,6 +1443,7 @@ const INVOICE_TITLES = { deposit:'Deposit Invoice', progress:'Progress Invoice',
 const INVOICE_TYPES = { deposit:'Deposit', progress:'Progress', final:'Final', full:'Full Payment', paid:'Paid' };
 function invoiceDocHtml(stage, invNo, opts) {
   opts = opts || {};
+  if (!/^INV-\d{4}-\d+$/.test(String(invNo || ''))) throw new Error('Invoice number missing (got "' + invNo + '"). Nothing was made.');
   const k = invoiceCalc(stage, opts);
   const m = k.money, c = S.client;
   const client = (c.first + ' ' + c.last).trim() || '—';
@@ -1500,7 +1501,7 @@ function invoiceDocHtml(stage, invNo, opts) {
     '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invNo + '</strong></div>' +
     (m.sections.some(function(x){ return x.key === 'spallCem'; }) ? cemWarrantyHTML() : '') +
     (opts.notes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + String(opts.notes).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div>' : '') +
-    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
+    '<div class="disclaimer">Payment is due as per the terms above. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
     '</div>' + docFooter() + '</body></html>';
   return { html: html, calc: k, title: title, type: INVOICE_TYPES[stage] };
 }
@@ -1680,6 +1681,6 @@ function stampQuoteDates() {
     applyPriceOverrides({});
     return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });
   }
-  return { version: 'e7035c58dc93', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
+  return { version: 'a9eb19e3645d', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
            setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };
 })();

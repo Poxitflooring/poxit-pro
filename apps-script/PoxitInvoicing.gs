@@ -271,18 +271,158 @@ function PXI_nextInvoice_(b) {
 
 function PXI_takeInvoiceNumber_(localLast) {
   var props = PropertiesService.getScriptProperties();
-  var last = PXI_num_(props.getProperty('PXI_LAST_INVOICE'));
-  // never go below any number already used, in the log or on a device
-  var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
-  if (inv && inv.getLastRow() > 1) {
-    inv.getRange(2, 1, inv.getLastRow() - 1, 1).getValues().forEach(function (r) {
-      var m = String(r[0]).match(/INV-\d{4}-(\d+)/);
-      if (m) last = Math.max(last, parseInt(m[1], 10));
+  var used = PXI_usedInvoiceNumbers_(localLast);
+  var forced = PXI_num_(props.getProperty('PXI_NEXT_FORCE'));
+  var n;
+  if (forced > 0) {
+    if (used.set[forced]) throw new Error(PXI_invRef_(forced) + ' is already used (' + used.set[forced] + '). Pick another with PXI_setNextInvoiceNo.');
+    n = forced;
+    props.deleteProperty('PXI_NEXT_FORCE');
+  } else {
+    n = used.max + 1;
+    while (used.set[n]) n++;
+  }
+  props.setProperty('PXI_LAST_INVOICE', String(Math.max(n, PXI_num_(props.getProperty('PXI_LAST_INVOICE')))));
+  return n;
+}
+
+// Every invoice number already used this year, and where it was seen: the shared counter, the
+// Invoices tab, the quote sheet, the Drive index, the Invoices folder, sent Gmail and the device.
+function PXI_usedInvoiceNumbers_(localLast) {
+  var year = Utilities.formatDate(new Date(), PXI.TZ, 'yyyy');
+  var re = new RegExp('INV-' + year + '-(\\d{1,5})', 'g');
+  var set = {}, max = 0, where = '';
+  function add(text, source) {
+    String(text || '').replace(re, function (m, d) {
+      var k = parseInt(d, 10);
+      if (!(k > 0)) return m;
+      if (!set[k]) set[k] = source;
+      if (k > max) { max = k; where = source + ' (' + m + ')'; }
+      return m;
     });
   }
-  var n = Math.max(last, Math.floor(localLast || 0)) + 1;
-  props.setProperty('PXI_LAST_INVOICE', String(n));
-  return n;
+  var props = PropertiesService.getScriptProperties();
+  var last = PXI_num_(props.getProperty('PXI_LAST_INVOICE'));
+  if (last > max) { max = last; where = 'shared counter (' + PXI_invRef_(last) + ')'; }
+  var dev = Math.floor(PXI_num_(localLast));
+  if (dev > max) { max = dev; where = 'quote tool device counter (' + PXI_invRef_(dev) + ')'; }
+  var ss = PXI_ss_();
+  var inv = ss.getSheetByName(PXI.INV_TAB);
+  if (inv && inv.getLastRow() > 1) inv.getRange(2, 1, inv.getLastRow() - 1, 1).getValues().forEach(function (r) { add(r[0], 'Invoices tab'); });
+  var qs = ss.getSheetByName(PXI.QUOTES_TAB);
+  if (qs && qs.getLastRow() > 0) qs.getRange(1, PXI.Q.INV_NO, qs.getLastRow(), 1).getValues().forEach(function (r) { add(r[0], 'quote sheet'); });
+  var idx = ss.getSheetByName(PXI.FILES_TAB);
+  if (idx && idx.getLastRow() > 1) idx.getRange(2, 3, idx.getLastRow() - 1, 5).getValues().forEach(function (r) { add(r[0] + ' ' + r[4], 'Drive Files tab'); });
+  try {
+    var it = DriveApp.getFolderById(PXI.INVOICES_FOLDER_ID).getFiles();
+    while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) add(f.getName(), 'Drive Invoices folder'); }
+  } catch (e) {}
+  var g = PXI_gmailInvoiceNumbers_(year);
+  Object.keys(g).forEach(function (k) { add('INV-' + year + '-' + k, g[k]); });
+  return { set: set, max: max, where: where, year: year };
+}
+// Invoice numbers on emails Dom has sent (attachment names and subjects). Cached for 6 hours.
+function PXI_gmailInvoiceNumbers_(year) {
+  var props = PropertiesService.getScriptProperties();
+  var cacheKey = 'PXI_GMAIL_NUMS_' + year;
+  try {
+    var c = JSON.parse(props.getProperty(cacheKey) || 'null');
+    if (c && c.at > Date.now() - 6 * 3600000) return c.nums;
+  } catch (e) {}
+  var nums = {};
+  if (typeof GmailApp === 'undefined') return nums;
+  try {
+    var re = new RegExp('INV-' + year + '-(\\d{1,5})', 'g');
+    var threads = GmailApp.search('in:sent ("INV-' + year + '" OR filename:INV-' + year + ')', 0, 300);
+    threads.forEach(function (t) {
+      t.getMessages().forEach(function (m) {
+        var text = m.getSubject() + ' ' + m.getAttachments({ includeInlineImages: false }).map(function (a) { return a.getName(); }).join(' ');
+        text.replace(re, function (x, d) { var k = parseInt(d, 10); if (k > 0 && !nums[k]) nums[k] = 'sent Gmail, ' + Utilities.formatDate(m.getDate(), PXI.TZ, 'd MMM yyyy') + ' to ' + m.getTo(); return x; });
+      });
+    });
+    props.setProperty(cacheKey, JSON.stringify({ at: Date.now(), nums: nums }));
+  } catch (e) { /* Gmail not authorised yet: the other sources still count */ }
+  return nums;
+}
+// Correct the counter by hand: the next invoice gets this number (it must not be in use)
+function PXI_setNextInvoiceNo(n) {
+  n = Math.floor(PXI_num_(String(n === undefined ? '' : n).replace(/^INV-\d{4}-/, '')));
+  if (!(n > 0)) throw new Error('Give the number the next invoice should get, e.g. PXI_setNextInvoiceNo(36)');
+  var used = PXI_usedInvoiceNumbers_(0);
+  if (used.set[n]) throw new Error(PXI_invRef_(n) + ' is already used (' + used.set[n] + ').');
+  PropertiesService.getScriptProperties().setProperty('PXI_NEXT_FORCE', String(n));
+  Logger.log('The next invoice will be ' + PXI_invRef_(n));
+  return PXI_invRef_(n);
+}
+// What the counter sees: run this to check before issuing a number
+function PXI_showInvoiceNumbers() {
+  var u = PXI_usedInvoiceNumbers_(0);
+  var msg = 'Highest invoice number used in ' + u.year + ': ' + (u.max ? PXI_invRef_(u.max) : 'none') + (u.where ? ', found in ' + u.where : '') + '. Next: ' + PXI_invRef_(u.max + 1) + '.';
+  Logger.log(msg);
+  return { status: 'ok', message: msg, max: u.max, where: u.where, next: PXI_invRef_(u.max + 1), used: Object.keys(u.set).map(Number).sort(function (a, b) { return a - b; }) };
+}
+
+// Give an unsent invoice the next correct number: same Drive file (updated in place), rebuilt with the
+// tool's template, Invoices tab, Drive index and quote row all updated.
+function PXI_renumberInvoice_(invNo, newNo) {
+  var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
+  var r = PXI_findInvoiceRow_(inv, invNo);
+  if (!r) throw new Error('No invoice ' + invNo + ' in the Invoices tab.');
+  var row = inv.getRange(r, 1, 1, PXI.INV_HEADERS.length).getValues()[0];
+  if (row[9] === true || String(row[9]).toUpperCase() === 'TRUE') throw new Error(invNo + ' is ticked Paid, so it has been sent. Not renumbered.');
+  var log = PXI_ss_().getSheetByName('Email Log');
+  if (log && log.getLastRow() > 1 && log.getRange(2, 1, log.getLastRow() - 1, 8).getValues().some(function (x) { return String(x[7]) === String(invNo); })) {
+    throw new Error(invNo + ' has been emailed (Email Log). Not renumbered.');
+  }
+  var key = String(row[2]), type = String(row[4]);
+  var quote = PXI_findQuoteForRequest_(key, '');
+  var state = PXI_quoteState_(quote.row);
+  if (!state) throw new Error('Quote ' + row[1] + ' has no saved quote data to rebuild the invoice from.');
+  if (typeof PXP === 'undefined') throw new Error('PoxitPricing.gs is missing from the project.');
+  var n;
+  if (newNo) {
+    n = Math.floor(PXI_num_(String(newNo).replace(/^INV-\d{4}-/, '')));
+    var u = PXI_usedInvoiceNumbers_(0);
+    if (u.set[n]) throw new Error(PXI_invRef_(n) + ' is already used (' + u.set[n] + ').');
+  } else {
+    n = PXI_takeInvoiceNumber_(0);
+  }
+  var newRef = PXI_invRef_(n);
+  var stage = { 'Deposit': 'deposit', 'Progress': 'progress', 'Final': 'final', 'Full Payment': 'full', 'Paid': 'paid' }[type] || 'final';
+  var ledger = PXI_invoicesForKey_(quote.key).filter(function (x) { return x.invNo !== invNo; });
+  var res = PXP.invoice({ state: state.state, measureShapes: state.measureShapes, prices: typeof PXA_prices_ === 'function' ? PXA_prices_() : {},
+                          saveKey: quote.key, stage: stage, amount: row[7], ledger: ledger, invNo: newRef, date: Date.now() });
+  var html = typeof PXA_serverHtml_ === 'function' ? PXA_serverHtml_(res.html) : res.html;
+  var c = state.state.client || {};
+  var name = PXI_fileName_([quote.client, c.area || '', (type + ' Invoice' + (res.progressNo ? ' ' + res.progressNo : '')), newRef]);
+  var pdf = Utilities.newBlob(html, 'text/html', name.replace(/\.pdf$/, '.html')).getAs('application/pdf').setName(name);
+  var file = null;
+  try { file = row[13] ? DriveApp.getFileById(String(row[13])) : null; } catch (e) { file = null; }
+  if (file) {
+    if (typeof Drive === 'undefined' || !Drive.Files || !Drive.Files.update) throw new Error('Switch on the Drive service (Services > Drive API) first.');
+    Drive.Files.update({}, file.getId(), pdf);
+    file.setName(name);
+  } else {
+    file = DriveApp.getFolderById(PXI.INVOICES_FOLDER_ID).createFile(pdf);
+  }
+  inv.getRange(r, 1).setValue(newRef);
+  inv.getRange(r, 6, 1, 4).setValues([[PXI_today_(), res.totalInc, res.amount, res.gst]]);
+  inv.getRange(r, 14, 1, 2).setValues([[file.getId(), file.getUrl()]]);
+  inv.getRange(r, 18).setValue(res.earlyDiscount || '');
+  var idx = PXI_ss_().getSheetByName(PXI.FILES_TAB);
+  var hit = PXI_findFileEntry_(idx, 'Invoice', invNo);
+  var vals = ['Invoice', quote.key, newRef, quote.client, file.getId(), file.getUrl(), name, PXI_now_(), Date.now()];
+  idx.getRange(hit ? hit.row : idx.getLastRow() + 1, 1, 1, vals.length).setValues([vals]);
+  var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
+  var qrow = PXI_findQuoteRowByKey_(qs, quote.key);
+  if (qrow) PXI_mirrorFiles_(qs, qrow, quote.key);
+  return { status: 'ok', oldNo: invNo, invNo: newRef, ref: quote.ref, client: quote.client, amountDue: res.amount, fileId: file.getId(), link: file.getUrl(), fileName: name };
+}
+// Run once from the editor: gives Megan's unsent INV-2026-001 the correct next number
+function PXI_fixInvoice001() {
+  var r = PXI_renumberInvoice_('INV-2026-001');
+  Logger.log('INV-2026-001 is now ' + r.invNo + ' (' + r.fileName + ')');
+  return r;
 }
 
 // ---------------------------------------------------------------------
@@ -323,69 +463,9 @@ function PXI_buildInvoiceFromRequest_(q) {
 
   var quote = PXI_findQuoteForRequest_(q.ref, q.client);
   var state = PXI_quoteState_(quote.row);
-  if (state && typeof PXP !== 'undefined') return PXI_invoiceFromState_(q, type, quote, state);
-
-  var snap = quote.snapshot;
-  if (!snap || !(PXI_num_(snap.incGst) > 0)) {
-    throw new Error('No saved totals for ' + quote.ref + ' yet. Open the quote in the tool, hit Update once, then clear this Status to retry.');
-  }
-  var jobTotal = PXI_round_(PXI_num_(snap.incGst));
-
-  // Every paid bill counts toward paid to date. "Paid" receipts from the tool are not bills, so they are skipped.
-  var BILLS = { 'Deposit': 1, 'Progress': 1, 'Final': 1, 'Full Payment': 1, 'Full': 1 };
-  var prior = PXI_invoicesForKey_(quote.key).filter(function (p) { return BILLS[p.type]; });
-  var paidRows = prior.filter(function (p) { return p.paid; });
-  var unpaidRows = prior.filter(function (p) { return !p.paid; });
-  var paidToDate = PXI_round_(paidRows.reduce(function (s, p) { return s + p.amountDue; }, 0));
-  var remaining = PXI_round_(jobTotal - paidToDate);
-  var notes = [];
-
-  var amountDue;
-  if (type === 'Deposit') {
-    amountDue = PXI_round_(snap.deposit && snap.deposit.amount > 0 ? snap.deposit.amount : jobTotal * PXI.DEPOSIT_RATE);
-    var earlierDeposit = prior.filter(function (p) { return p.type === 'Deposit'; });
-    if (earlierDeposit.length) notes.push('Heads up: ' + earlierDeposit.map(function (p) { return p.invNo; }).join(', ') + ' is already a Deposit invoice for this quote.');
-  } else if (type === 'Progress') {
-    amountDue = PXI_round_(PXI_money_(q.amount));
-    if (!(amountDue > 0)) throw new Error('Progress invoices need a dollar amount (inc GST) in "Progress Amount".');
-    if (amountDue > remaining + 0.005) throw new Error('Progress amount ' + PXI_fmt_(amountDue) + ' is more than what is left on the job (' + PXI_fmt_(remaining) + ').');
-  } else {
-    amountDue = remaining;
-    var earlierFinal = unpaidRows.filter(function (p) { return p.type === 'Final'; });
-    if (earlierFinal.length) notes.push('Heads up: ' + earlierFinal.map(function (p) { return p.invNo; }).join(', ') + ' is an earlier Final for this job that is not ticked Paid. Only send one of them.');
-    if (!(amountDue > 0.004)) throw new Error('Nothing left to invoice: paid to date ' + PXI_fmt_(paidToDate) + ' already covers the job total ' + PXI_fmt_(jobTotal) + '.');
-  }
-  if (unpaidRows.length) {
-    notes.push('Not taken off because they are not ticked Paid: ' + unpaidRows.map(function (p) { return p.invNo + ' ' + p.type + ' ' + PXI_fmt_(p.amountDue); }).join(', ') + '.');
-  }
-
-  var balanceAfter = PXI_round_(jobTotal - paidToDate - amountDue);
-  var gst = PXI_round_(amountDue / 11);
-
-  var invNo = PXI_invRef_(PXI_takeInvoiceNumber_(0));
-
-  var entity = quote.entity;
-  var html = PXI_invoiceHtml_({
-    invNo: invNo, type: type, quote: quote, snap: snap, entity: entity,
-    jobTotal: jobTotal, paidRows: paidRows, paidToDate: paidToDate,
-    amountDue: amountDue, gst: gst, balanceAfter: balanceAfter
-  });
-  var name = PXI_fileName_([quote.client, (snap.client && snap.client.area) || '',
-    ((snap.service ? snap.service + ' ' : '') + type + ' Invoice').trim(), invNo]);
-  var pdf = Utilities.newBlob(html, 'text/html', name.replace(/\.pdf$/, '.html')).getAs('application/pdf').setName(name);
-  var file = PXI_storePdf_({ kind: 'Invoice', key: quote.key, number: invNo, client: quote.client, name: name, blob: pdf }).file;
-
-  var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
-  var r = inv.getLastRow() + 1;
-  inv.getRange(r, 1, 1, PXI.INV_HEADERS.length).setValues([[invNo, quote.ref, quote.key, quote.client, type, PXI_today_(),
-    jobTotal, amountDue, gst, false, '', 'Invoice Request', entity, file.getId(), file.getUrl()]]);
-  inv.getRange(r, 10).insertCheckboxes();
-  var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
-  var qrow = PXI_findQuoteRowByKey_(qs, quote.key);
-  if (qrow) PXI_mirrorFiles_(qs, qrow, quote.key);
-
-  return { invNo: invNo, jobTotal: jobTotal, paidToDate: paidToDate, amountDue: amountDue, gst: gst,
-           balanceAfter: balanceAfter, fileId: file.getId(), link: file.getUrl(), message: notes.join(' ') };
+  if (!state) throw new Error('Quote ' + quote.ref + ' was saved before the quote data was kept with it. Open it in the tool and hit Update once, then clear this Status to retry.');
+  if (typeof PXP === 'undefined') throw new Error('PoxitPricing.gs is missing from the project. Paste it in and try again.');
+  return PXI_invoiceFromState_(q, type, quote, state);
 }
 
 // The tool's own invoice (payment history, deposit limits, early payment), built from the saved quote
@@ -395,7 +475,7 @@ function PXI_invoiceFromState_(q, type, quote, state) {
   var prices = typeof PXA_prices_ === 'function' ? PXA_prices_() : {};
   var notes = [];
   var probe = PXP.invoice({ state: state.state, measureShapes: state.measureShapes, prices: prices, saveKey: quote.key,
-                            stage: stage, amount: q.amount, ledger: ledger, invNo: 'INV-PREVIEW', date: Date.now() });
+                            stage: stage, amount: q.amount, ledger: ledger, invNo: 'INV-0000-000', date: Date.now() });
   if (type === 'Progress') {
     var want = PXI_round_(PXI_money_(q.amount));
     if (!(want > 0)) throw new Error('Progress invoices need a dollar amount (inc GST) in "Progress Amount".');
@@ -509,97 +589,6 @@ function PXI_findInvoiceRow_(sh, invNo) {
   return 0;
 }
 
-// ---------------------------------------------------------------------
-//  Invoice document (table layout so Google's PDF converter keeps it tidy)
-// ---------------------------------------------------------------------
-function PXI_invoiceHtml_(d) {
-  var E = PXI.ENTITIES[d.entity] || PXI.ENTITIES['Company'];
-  var s = d.snap || {}, c = s.client || {};
-  var esc = PXI_esc_;
-  var today = new Date(), due = new Date(today.getTime() + PXI.DUE_DAYS * 86400000);
-  var idLine = esc(E.legalName) + ' &nbsp;|&nbsp; ABN ' + esc(E.abn) + (E.acn ? ' &nbsp;|&nbsp; ACN ' + esc(E.acn) : '');
-  var titles = { Deposit: 'Deposit Invoice', Progress: 'Progress Claim', Final: 'Final Invoice' };
-
-  var css = 'body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#1a1a1a;margin:0;}' +
-    'table{border-collapse:collapse;width:100%;}td{vertical-align:top;}' +
-    '.hdr td{background:#0a0a0a;color:#fff;text-align:center;padding:18pt 10pt 14pt;}' +
-    '.rule td{background:#0ABAB5;height:4pt;font-size:1pt;line-height:1pt;}' +
-    '.badge{background:#0ABAB5;color:#fff;font-weight:bold;font-size:10pt;letter-spacing:1pt;padding:3pt 8pt;}' +
-    '.cb td{border-bottom:1px solid #e8e8e8;padding:5pt 8pt;font-size:10.5pt;}' +
-    '.cl{font-weight:bold;width:32%;}' +
-    '.sec td{border-bottom:1.5px solid #0ABAB5;padding:14pt 0 3pt;font-weight:bold;font-size:11.5pt;text-transform:uppercase;}' +
-    '.num{color:#0ABAB5;}' +
-    '.sc td{padding:5pt 3pt;font-size:10.5pt;}.sc .amt{text-align:right;white-space:nowrap;width:22%;font-weight:bold;}' +
-    '.desc{font-size:9.5pt;color:#777;font-style:italic;}.add{font-size:9.5pt;color:#555;padding-left:12pt !important;}' +
-    '.tot td{padding:4pt 3pt;font-size:10.5pt;}.tot .amt{text-align:right;font-weight:bold;width:30%;}' +
-    '.inc td{border-top:2px solid #0ABAB5;font-size:13pt;font-weight:bold;}.inc .amt{color:#0ABAB5;}' +
-    '.pay{border:1.5px solid #0ABAB5;}.pay td{padding:5pt 10pt;font-size:10.5pt;border-bottom:1px solid #f0f0f0;}' +
-    '.pay .amt{text-align:right;font-weight:bold;width:30%;}.ptitle td{color:#0ABAB5;font-weight:bold;text-transform:uppercase;padding-top:8pt;}' +
-    '.due td{font-weight:bold;font-size:12.5pt;}.due .amt{color:#0ABAB5;}' +
-    '.bank td{background:#f9f8f6;border:1px solid #e0ddd8;padding:8pt 10pt;font-size:10.5pt;line-height:1.6;}' +
-    '.fine{font-size:8.5pt;color:#999;font-style:italic;padding-top:5pt;}' +
-    '.foot td{border-top:1px solid #e0e0e0;text-align:center;font-size:8.5pt;color:#999;padding:10pt;}';
-
-  var site = [c.address || d.quote.address, c.suburb].filter(function (x) { return x && String(x).trim(); }).join(', ');
-  var clientRows = [
-    ['Invoice To', '<b>' + esc(c.name || d.quote.client) + '</b>'],
-    ['Phone', esc(c.phone || '—')], ['Email', esc(c.email || '—')],
-    ['Site Address', esc(site || '—')], ['Quote Reference', esc(d.quote.ref || '—')],
-    ['Invoice Date', PXI_fmtDate_(today)], ['Due Date', PXI_fmtDate_(due)]
-  ].map(function (x) { return '<tr><td class="cl">' + x[0] + ':</td><td>' + x[1] + '</td></tr>'; }).join('');
-
-  var lines = (s.lines || []).map(function (l) {
-    var adds = (l.addons || []).map(function (a) { return '<tr><td class="add" colspan="2">↳ ' + esc(a) + '</td></tr>'; }).join('');
-    return '<tr><td><b>' + esc(l.category) + '</b>' + (l.zoneName ? ' — ' + esc(l.zoneName) : '') +
-      (l.desc ? '<br><span class="desc">' + esc(l.desc) + '</span>' : '') + '</td><td class="amt">' + PXI_fmt_(l.amount) + '</td></tr>' + adds;
-  }).join('');
-  if (PXI_num_(s.adjustment)) lines += '<tr><td><b>' + (s.adjustment < 0 ? 'Discount' : 'Adjustment') + '</b></td><td class="amt">' + (s.adjustment < 0 ? '-' : '') + PXI_fmt_(Math.abs(s.adjustment)) + '</td></tr>';
-
-  var pay = '<tr class="ptitle"><td colspan="2">' + titles[d.type] + '</td></tr>' +
-    '<tr><td>Job total (inc GST)</td><td class="amt">' + PXI_fmt_(d.jobTotal) + '</td></tr>';
-  if (d.type === 'Deposit') {
-    pay += '<tr><td>' + Math.round(PXI.DEPOSIT_RATE * 100) + '% deposit to confirm your booking</td><td class="amt">' + PXI_fmt_(d.amountDue) + '</td></tr>';
-  } else {
-    d.paidRows.forEach(function (p) {
-      pay += '<tr><td>Less ' + esc(p.type.toLowerCase()) + ' paid (' + esc(p.invNo) + ')</td><td class="amt">-' + PXI_fmt_(p.amountDue) + '</td></tr>';
-    });
-    if (d.type === 'Progress') pay += '<tr><td>This progress claim</td><td class="amt">' + PXI_fmt_(d.amountDue) + '</td></tr>';
-  }
-  pay += '<tr class="due"><td>' + (d.type === 'Final' ? 'Balance due' : 'Amount due') + '</td><td class="amt">' + PXI_fmt_(d.amountDue) + '</td></tr>' +
-    '<tr><td>GST included in amount due</td><td class="amt">' + PXI_fmt_(d.gst) + '</td></tr>';
-  if (d.type !== 'Final') pay += '<tr><td>Balance remaining after this invoice</td><td class="amt">' + PXI_fmt_(d.balanceAfter) + '</td></tr>';
-
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + esc(d.invNo) + '</title><style>' + css + '</style></head><body>' +
-    '<table class="hdr"><tr><td><div style="font-size:30pt;font-weight:bold;letter-spacing:3pt;">POXIT</div>' +
-    '<div style="font-size:9pt;letter-spacing:4pt;font-weight:bold;">FLOORING</div>' +
-    '<div style="font-size:8.5pt;color:#0ABAB5;letter-spacing:2pt;font-weight:bold;padding-top:8pt;">CONCRETE REPAIR &amp; COATING SPECIALISTS</div>' +
-    '<div style="font-size:11pt;letter-spacing:1.5pt;font-weight:bold;padding-top:3pt;">TAX INVOICE</div>' +
-    '<div style="font-size:8.5pt;color:#bbb;padding-top:8pt;">' + idLine + '</div></td></tr></table>' +
-    '<table class="rule"><tr><td>&nbsp;</td></tr></table>' +
-    '<div style="padding:16pt 26pt;">' +
-    '<p style="margin:0 0 10pt;"><span class="badge">TAX INVOICE · ' + esc(d.invNo) + '</span></p>' +
-    '<table class="cb" style="border:1px solid #ccc;">' + clientRows + '</table>' +
-    '<table><tr class="sec"><td><span class="num">1.</span> Scope of Works</td></tr></table>' +
-    '<table class="sc">' + lines + '</table>' +
-    '<table><tr class="sec"><td><span class="num">2.</span> Job Total</td></tr></table>' +
-    '<table class="tot"><tr><td>Subtotal (ex GST)</td><td class="amt">' + PXI_fmt_(s.exGst) + '</td></tr>' +
-    '<tr><td>GST (10%)</td><td class="amt">' + PXI_fmt_(s.gst) + '</td></tr>' +
-    '<tr class="inc"><td>TOTAL INC GST</td><td class="amt">' + PXI_fmt_(d.jobTotal) + '</td></tr></table>' +
-    '<table><tr class="sec"><td><span class="num">3.</span> Payment</td></tr></table>' +
-    '<table class="pay">' + pay + '</table>' +
-    '<table class="bank" style="margin-top:8pt;"><tr><td><b>Bank Transfer:</b><br>Account Name: <b>' + esc(E.bankName) + '</b><br>' +
-    'BSB: <b>' + esc(E.bsb) + '</b> &nbsp;&nbsp; Account: <b>' + esc(E.account) + '</b><br>Reference: <b>' + esc(d.invNo) + '</b></td></tr></table>' +
-    (s.notes || []).map(function (n) { return '<p style="font-size:10pt;line-height:1.6;margin:10pt 0 0;">' + esc(n) + '</p>'; }).join('') +
-    '<p class="fine">Payment is due within ' + PXI.DUE_DAYS + ' days. Late payments incur fees as per the signed work contract. ' + esc(E.legalName) + ' ABN ' + esc(E.abn) + '</p>' +
-    '</div>' +
-    '<table class="foot"><tr><td>' + esc(E.legalName) + ' · ABN ' + esc(E.abn) + (E.acn ? ' · ACN ' + esc(E.acn) : '') + ' · ' + esc(E.address) +
-    ' · ' + PXI.CONTACT.phone + ' · ' + PXI.CONTACT.email + ' · ' + PXI.CONTACT.web + '</td></tr></table>' +
-    '</body></html>';
-}
-
-// ---------------------------------------------------------------------
-//  One-time setup: tabs, folders, the 1-minute timer. Safe to run again.
-// ---------------------------------------------------------------------
 function PXI_setup() {
   var ss = PXI_ss_();
   [[PXI.REQ_TAB, PXI.REQ_HEADERS], [PXI.INV_TAB, PXI.INV_HEADERS], [PXI.FILES_TAB, PXI.FILES_HEADERS]].forEach(function (t) {

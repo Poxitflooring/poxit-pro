@@ -239,8 +239,100 @@ function boot(opts) {
   const a2 = env3.post({ action: 'regeneratePdf', key: 'k'.repeat(64), ref: a1.ref });
   ok(a1.status === 'ok' && a2.status === 'error' && /Drive service/.test(a2.message), 'without the Drive service an update is refused, not duplicated');
 
-  // ---- no email anywhere
+  // ===================== 19 NOV: numbering, one template, renumber, email =====================
+  const env4_9 = boot();
+  const YR_9 = new Date().getFullYear();
+  const th_9 = (subject, names, to) => ({ getMessages: () => [{ getSubject: () => subject, getAttachments: () => names.map(n => ({ getName: () => n })), getDate: () => new Date(), getTo: () => to }] });
+  env4_9.mail.sentThreads = [th_9('Epoxy Invoice - Garage and Outdoor', ['Mario Fairlie - Epoxy Invoice - INV-' + YR_9 + '-034.pdf'], 'mario@fairlie.com.au'),
+                           th_9('Spalling repairs invoice', ['Danny Wehbe - Spalling Invoice - INV-' + YR_9 + '-017.pdf'], 'danny@x.com'),
+                           th_9('Deposit invoice', ['Megan Madsen - Epoxy Deposit Invoice - INV-' + YR_9 + '-007.pdf'], 'megan@x.com')];
+  env4_9.run('PXI_setup(); PXA_setup(); PXE_setup();');
+  const K4_9 = env4_9.props.PXA_API_KEY;
+  env4_9.run("DriveApp.getFolderById(PXI.INVOICES_FOLDER_ID).createFile(Utilities.newBlob('x','application/pdf','Old Client - Final Invoice - INV-" + YR_9 + "-021.pdf'))");
+  const shown_9 = env4_9.run('PXI_showInvoiceNumbers()');
+  ok(shown_9.max === 34 && /sent Gmail/.test(shown_9.where) && shown_9.next === 'INV-' + YR_9 + '-035', 'NUMBERS highest used is INV-' + YR_9 + '-034 in sent Gmail, next 035 (' + shown_9.message + ')');
+  ok(shown_9.used.indexOf(21) > -1 && shown_9.used.indexOf(17) > -1 && shown_9.used.indexOf(7) > -1, 'NUMBERS Drive folder and every sent invoice are counted');
+  const n1_9 = env4_9.post({ action: 'nextInvoice', localLast: 3 });
+  ok(n1_9.ref === 'INV-' + YR_9 + '-035', 'NUMBERS the tool gets 035 from the shared counter, not 004');
+  ok(env4_9.post({ action: 'nextInvoice', localLast: 0 }).ref === 'INV-' + YR_9 + '-036', 'NUMBERS one counter: next call 036, never reissued');
+  ok(/already used/.test((() => { try { env4_9.run('PXI_setNextInvoiceNo(34)'); return ''; } catch (e) { return e.message; } })()), 'NUMBERS setNextInvoiceNo refuses a number already used');
+  env4_9.run('PXI_setNextInvoiceNo(40)');
+  ok(env4_9.post({ action: 'nextInvoice' }).ref === 'INV-' + YR_9 + '-040', 'NUMBERS setNextInvoiceNo(40) sets the next number');
+  ok(env4_9.post({ action: 'nextInvoice' }).ref === 'INV-' + YR_9 + '-041', 'NUMBERS and carries on from there');
+  // the Megan case: an invoice issued as 001 by mistake, unsent
+  const q4_9 = env4_9.post({ action: 'createQuote', key: K4_9, client: { name: 'Megan Madsen', address: '2/20 Thomas Drive', suburb: 'Surfers Paradise', location: 'Internal', email: 'mmadsen@professionals.com.au' }, areas: [{ type: 'epoxy', name: 'Hallway', area: 12 }] });
+  const ir_9 = env4_9.sheets['Invoice Requests'];
+  ir_9.getRange(2, 1, 1, 3).setValues([[q4_9.ref, 'Megan', 'Final']]);
+  env4_9.run('PXI_processInvoiceRequests()');
+  const it4_9 = env4_9.sheets.Invoices;
+  const madeNo_9 = ir_9.rows[1][6];
+  ok(madeNo_9 === 'INV-' + YR_9 + '-042', 'NUMBERS sheet invoice requests use the same counter (042)');
+  const rIdx_9 = it4_9.rows.findIndex(x => x[0] === madeNo_9);
+  const fileId4_9 = it4_9.rows[rIdx_9][13];
+  // pretend it went out as INV-YYYY-001 (what the old version did)
+  it4_9.rows[rIdx_9][0] = 'INV-' + YR_9 + '-001';
+  const fx_9 = env4_9.sheets['Drive Files'].rows.findIndex(x => x[2] === madeNo_9); env4_9.sheets['Drive Files'].rows[fx_9][2] = 'INV-' + YR_9 + '-001';
+  env4_9.files[fileId4_9].name = 'Megan Madsen - Final Invoice - INV-' + YR_9 + '-001.pdf';
+  const v0_9 = env4_9.files[fileId4_9].versions;
+  const rn_9 = env4_9.post({ action: 'renumberInvoice', key: K4_9, invoiceNo: 'INV-' + YR_9 + '-001' });
+  ok(rn_9.status === 'ok' && rn_9.invNo === 'INV-' + YR_9 + '-043' && rn_9.fileId === fileId4_9, 'RENUMBER 001 becomes the next number (043) on the same Drive file ' + (rn_9.message || ''));
+  ok(env4_9.files[fileId4_9].versions === v0_9 + 1 && env4_9.files[fileId4_9].name === 'Megan Madsen - Final Invoice - INV-' + YR_9 + '-043.pdf', 'RENUMBER PDF rebuilt and renamed');
+  const pdf4_9 = env4_9.files[fileId4_9].data;
+  ok(pdf4_9.indexOf('INV-' + YR_9 + '-043') > -1 && pdf4_9.indexOf('INV-' + YR_9 + '-001') < 0 && pdf4_9.indexOf('undefined') < 0, 'RENUMBER new number on the invoice and the payment reference');
+  ok(pdf4_9.indexOf('Quote Reference:</td><td class="client-cell"><div class="client-value">' + q4_9.ref) > -1, 'RENUMBER correct quote ref for the client (' + q4_9.ref + ')');
+  ok(it4_9.rows[rIdx_9][0] === 'INV-' + YR_9 + '-043' && env4_9.sheets['Drive Files'].rows[fx_9][2] === 'INV-' + YR_9 + '-043', 'RENUMBER Invoices tab and Drive index updated');
+  ok(env4_9.sheets.Sheet1.rows.find(x => x[0] === q4_9.key)[14] === 'INV-' + YR_9 + '-043', 'RENUMBER quote row shows the new number');
+  it4_9.rows[rIdx_9][9] = true;
+  ok(/Paid/.test(env4_9.post({ action: 'renumberInvoice', key: K4_9, invoiceNo: 'INV-' + YR_9 + '-043' }).message), 'RENUMBER refuses an invoice ticked Paid');
+  it4_9.rows[rIdx_9][9] = false;
+  // one template: the sheet's invoice is the tool's invoice
+  ok(pdf4_9.indexOf('<table class="doc-header-t"') > -1 && /bgcolor="#0a0a0a"/.test(pdf4_9) && /bgcolor="#0ABAB5"/.test(pdf4_9) && pdf4_9.indexOf('>POXIT<') > -1, 'TEMPLATE black header bar and teal rule kept as table cells for Google\'s converter');
+  ok(pdf4_9.indexOf('signed work contract') < 0 && pdf4_9.indexOf('Payment History') > -1 && pdf4_9.indexOf('Bank Transfer') > -1 && pdf4_9.indexOf('doc-footer') > -1, 'TEMPLATE same sections, bank details and footer as the tool, no "signed work contract"');
+  ok(!/PXI_invoiceHtml_/.test(fs.readFileSync(path.join(ROOT, 'apps-script', 'PoxitInvoicing.gs'), 'utf8')), 'TEMPLATE the old separate invoice layout is gone');
+  const st4_9 = JSON.parse(env4_9.sheets.Sheet1.rows.find(x => x[0] === q4_9.key)[6]).state;
+  tw.eval('confirmReset(false); restoreQuote(' + JSON.stringify({ state: st4_9, measureShapes: [] }) + '); S.saveKey=' + JSON.stringify(q4_9.key) + ';');
+  const fixedDate_9 = Date.UTC(2026, 10, 19, 1);
+  const toolInv_9 = tw.eval('invoiceDocHtml("final","INV-' + YR_9 + '-099",{ledger:[],date:new Date(' + fixedDate_9 + ')}).html');
+  const srvInv_9 = env4_9.run('PXP.invoice({state:' + JSON.stringify(st4_9) + ',saveKey:' + JSON.stringify(q4_9.key) + ',stage:"final",ledger:[],invNo:"INV-' + YR_9 + '-099",date:' + fixedDate_9 + '}).html');
+  ok(toolInv_9 === srvInv_9, 'TEMPLATE the sheet builds exactly the same invoice HTML as the tool (one source)');
+
+  // ---- email: draft, then send that draft only
+  const dr_9 = env4_9.post({ action: 'draftEmail', key: K4_9, ref: q4_9.ref, doc: 'invoice', invoiceNo: 'INV-' + YR_9 + '-043', to: ['mmadsen@professionals.com.au'], cc: 'mike@example.com', subject: 'Final invoice, 2/20 Thomas Drive', body: 'Hi Megan,\n\nPlease find the final invoice attached.\n\nKind regards,\nDominic' });
+  ok(dr_9.status === 'ok' && dr_9.draftId && dr_9.attachment === 'Megan Madsen - Final Invoice - INV-' + YR_9 + '-043.pdf', 'EMAIL draft made with the invoice PDF attached ' + (dr_9.message || ''));
+  const d4_9 = env4_9.mail.drafts[dr_9.draftId];
+  ok(d4_9 && d4_9.body.indexOf('Kind regards,\nDominic\n\nDominic Amsteins\nDirector') > -1 && d4_9.opts.cc === 'mike@example.com' && d4_9.opts.name === 'Dominic Amsteins' && !d4_9.opts.htmlBody, 'EMAIL plain text body, sign off, then signature; cc kept');
+  ok(dr_9.from.toLowerCase() === 'dominic@poxitflooring.com.au' && /mail\.google\.com/.test(dr_9.gmailLink) && dr_9.to[0] === 'mmadsen@professionals.com.au', 'EMAIL from Dominic@poxitflooring.com.au, returns the Gmail link');
+  ok(env4_9.mail.sent.length === 0, 'EMAIL nothing sent by draftEmail');
+  const dq_9 = env4_9.post({ action: 'draftEmail', key: K4_9, ref: q4_9.ref, doc: 'quote', to: 'mmadsen@professionals.com.au', subject: 'Your quote', body: 'Hi Megan,\n\nQuote attached.\n\nDominic' });
+  ok(dq_9.status === 'ok' && /^PXT-\d{4}-\d+ - Megan Madsen/.test(dq_9.attachment), 'EMAIL quote drafts attach the latest quote PDF (' + dq_9.attachment + ')');
+  ok(/valid email/.test(env4_9.post({ action: 'draftEmail', key: K4_9, ref: q4_9.ref, doc: 'quote', to: 'not-an-email', subject: 'x', body: 'y' }).message), 'EMAIL bad address refused');
+  ok(/key/i.test(env4_9.post({ action: 'sendDraft', draftId: dr_9.draftId }).message), 'EMAIL sendDraft needs the key');
+  const sd_9 = env4_9.post({ action: 'sendDraft', key: K4_9, draftId: dr_9.draftId });
+  ok(sd_9.status === 'ok' && env4_9.mail.sent.length === 1 && env4_9.mail.sent[0].id === dr_9.draftId && sd_9.messageId === 'sent-' + dr_9.draftId, 'EMAIL sendDraft sends exactly that draft');
+  const lg_9 = env4_9.sheets['Email Log'].rows[1];
+  ok(lg_9 && lg_9[1] === q4_9.ref && lg_9[2] === 'invoice' && lg_9[3] === 'mmadsen@professionals.com.au' && lg_9[6] === dr_9.draftId && lg_9[7] === 'INV-' + YR_9 + '-043' && lg_9[8] === sd_9.messageId, 'EMAIL logged in the Email Log tab');
+  ok(/\d/.test(String(env4_9.sheets.Sheet1.rows.find(x => x[0] === q4_9.key)[18])), 'EMAIL sent date written to the quote row (Emailed, column S)');
+  ok(/No draft/.test(env4_9.post({ action: 'sendDraft', key: K4_9, draftId: dr_9.draftId }).message) && env4_9.mail.sent.length === 1, 'EMAIL a draft can only be sent once');
+  ok(/Paid|emailed/.test(env4_9.post({ action: 'renumberInvoice', key: K4_9, invoiceNo: 'INV-' + YR_9 + '-043' }).message), 'RENUMBER refuses an invoice that has been emailed');
+  env4_9.mail.me = 'someone@gmail.com';
+  const before4_9 = Object.keys(env4_9.mail.drafts).length;
+  ok(/not one of its send-as addresses/.test(env4_9.post({ action: 'draftEmail', key: K4_9, ref: q4_9.ref, doc: 'quote', to: 'a@b.com', subject: 'x', body: 'y' }).message) && Object.keys(env4_9.mail.drafts).length === before4_9, 'EMAIL wrong account and no alias: error, nothing drafted');
+  env4_9.mail.aliases = ['Dominic@poxitflooring.com.au'];
+  const da_9 = env4_9.post({ action: 'draftEmail', key: K4_9, ref: q4_9.ref, doc: 'quote', to: 'a@b.com', subject: 'x', body: 'y' });
+  ok(da_9.status === 'ok' && env4_9.mail.drafts[da_9.draftId].opts.from === 'Dominic@poxitflooring.com.au', 'EMAIL other account with the alias: drafts from the alias');
+  env4_9.mail.me = 'Dominic@poxitflooring.com.au'; env4_9.mail.aliases = [];
+  const ar_9 = env4_9.sheets['API Requests'];
+  ar_9.getRange(2, 1, 1, 2).setValues([['draftEmail', JSON.stringify({ ref: q4_9.ref, doc: 'quote', to: ['a@b.com'], subject: 'Quote', body: 'Hi,\n\nAttached.\n\nDominic' })]]);
+  env4_9.run('PXA_processApiRequests()');
+  const qres_9 = JSON.parse(ar_9.rows[1][9] || '{}');
+  ok(ar_9.rows[1][2] === 'Done' && qres_9.draftId && env4_9.mail.drafts[qres_9.draftId], 'EMAIL draftEmail works through the API Requests tab');
+  ar_9.getRange(3, 1, 1, 2).setValues([['sendDraft', JSON.stringify({ draftId: qres_9.draftId })]]);
+  env4_9.run('PXA_processApiRequests()');
+  ok(ar_9.rows[2][2] === 'Done' && env4_9.mail.sent.length === 2, 'EMAIL sendDraft works through the API Requests tab');
+
+  // ---- no email anywhere except sendDraft
   const allGs = ['PoxitPricing.gs', 'PoxitInvoicing.gs', 'PoxitApi.gs'].map(x => fs.readFileSync(path.join(ROOT, 'apps-script', x), 'utf8')).join('\n');
-  ok(!/\b(MailApp|GmailApp)\s*\./.test(allGs), 'no MailApp or GmailApp calls in any script');
+  ok(!/MailApp\s*\.|sendEmail\s*\(/.test(allGs), 'no MailApp or sendEmail anywhere');
+  ok((allGs.match(/\.send\(\)/g) || []).length === 1 && /var sent = draft\.send\(\);/.test(allGs), 'the only send in the project is sendDraft sending its one draft');
   console.log('\n' + passes + ' passed, ' + fails + ' failed');
 })().catch(e => { console.log('HARNESS ERROR ' + (e && e.stack || e)); process.exitCode = 1; });

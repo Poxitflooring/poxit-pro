@@ -469,7 +469,7 @@ setTimeout(async ()=>{try{
  ok(fs.existsSync('/home/claude/poxit-pro/fonts/PxMont-700.ttf') && fs.existsSync('/home/claude/poxit-pro/fonts/OFL.txt') && run("PDF_FACES.length")===8 && run("PDF_FACES").every(function(f){return fs.existsSync('/home/claude/poxit-pro/fonts/'+f[3]+'.ttf');}),'every font file the PDF uses is in the repo, with its licence');
  run("window.fetch=window.__fo9; window.open=window.__oo;");
  // ===== company details on documents =====
- run("closeDocOverlay(); window.__bsb=COMPANY.bankBSB; window.__acct=COMPANY.bankAccount; COMPANY.bankBSB=''; COMPANY.bankAccount=''; confirmReset(false); S.client.first='Mario'; S.client.last='Fairlie'; S.client.area='Garage'; S.client.ref='PXT-2026-014'; S.services={epoxy:true}; calcAll(); window.__alc=0; window.__alo2=window.alert; window.alert=function(){window.__alc++;}; window.__doc=''; openDoc=function(h){window.__doc=h;};");
+ run("closeDocOverlay(); window.__bsb=COMPANY.bankBSB; window.__acct=COMPANY.bankAccount; COMPANY.bankBSB=''; COMPANY.bankAccount=''; confirmReset(false); S.client.first='Mario'; S.client.last='Fairlie'; S.client.area='Garage'; S.client.ref='PXT-2026-014'; S.services={epoxy:true}; calcAll(); window.__alc=0; window.__alo2=window.alert; window.alert=function(m){ if(/BSB/.test(String(m))) window.__alc++; }; window.__doc=''; openDoc=function(h){window.__doc=h;};");
  run("generatePDF();"); var qd=run("window.__doc");
  run("makeInvoice('deposit');"); await run("window.__invoiceDone"); var idoc=run("window.__doc");
  var idLine='Poxit Flooring Pty Ltd&nbsp;&nbsp;|&nbsp;&nbsp;ABN 23 702 727 535&nbsp;&nbsp;|&nbsp;&nbsp;ACN 702 727 535';
@@ -487,7 +487,7 @@ setTimeout(async ()=>{try{
  run("COMPANY.bankBSB='000 000'; COMPANY.bankAccount='12345678'; window.__alc=0; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(run("window.__alc")===0 && run("window.__doc").indexOf('BSB: <strong>000 000</strong>')>=0 && run("window.__doc").indexOf('Account: <strong>12345678</strong>')>=0,'filled bank details print with no warning');
  run("COMPANY.bankBSB=window.__bsb; COMPANY.bankAccount=window.__acct; window.alert=window.__alo2; confirmReset(false);");
- run("window.__alc=0; window.__alo5=window.alert; window.alert=function(){window.__alc++;}; window.__doc=''; openDoc=function(h){window.__doc=h;}; makeInvoice('deposit');"); await run("window.__invoiceDone");
+ run("window.__alc=0; window.__alo5=window.alert; window.alert=function(m){ if(/BSB/.test(String(m))) window.__alc++; }; window.__doc=''; openDoc=function(h){window.__doc=h;}; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(run("window.__doc").indexOf('Account Name: <strong>Poxit Flooring Pty Ltd</strong><br>BSB: <strong>067 873</strong>&nbsp;&nbsp;&nbsp;Account: <strong>26553862</strong>')>=0,'live invoice prints the company BSB and account');
  ok(run("window.__alc")===0 && run("window.__doc").indexOf('[FILL IN]')<0,'live invoice has no FILL IN and no warning');
  run("window.alert=window.__alo5; confirmReset(false);");
@@ -1056,5 +1056,21 @@ setTimeout(async ()=>{try{
  ok(run("S.accepted && S.accepted.how")==='in person' && run("S.offers.bookNow")===true && run("S.offers.careCredit")===true && run("docCtx.kind")==='Invoice' && run("docCtx.invType")==='Deposit','CLOSE Book it applies the offers, records acceptance and opens the deposit invoice');
  ok(run("window.__doc").indexOf('Care Plan sign up credit')>-1 && run("window.__doc").indexOf('Book today discount')>-1,'deposit invoice carries the chosen offers');
  run("window.fetch=window.__fo18; closeDocOverlay(); confirmReset(false);");
+ // ===================== 19 NOV: invoice number, quote ref, footer =====================
+ run("window.__fo19=window.fetch; window.__al19=window.alert; window.__alerts19=[]; window.alert=function(m){window.__alerts19.push(String(m));}; openDoc=function(h){window.__doc=h;}; confirmReset(false); S.client.first='Num'; S.client.last='Test'; S.saveKey='PXT-1790000000009'; S.client.ref='PXT-2026-200'; localStorage.setItem('poxit_inv_num','7');");
+ run("window.fetch=function(u,o){ if(o&&o.method==='POST') return Promise.resolve({text:function(){return Promise.resolve('{\"status\":\"ok\"}');}}); return Promise.resolve({json:function(){return Promise.resolve({status:'ok',quotes:[]});}}); };");
+ var r19=await run("nextInvoiceRef().then(function(r){return r.ref;})");
+ ok(r19==='INV-'+new Date().getFullYear()+'-008','a sheet reply with no number falls back to the device counter (no "undefined")');
+ ok(run("window.__alerts19.some(function(m){return m.indexOf('device')>-1;})"),'and says so before the invoice goes out');
+ var threw=run("(function(){ try { invoiceDocHtml('deposit', undefined, {}); return false; } catch(e) { return /Invoice number missing/.test(e.message); } })()");
+ ok(threw,'an invoice is never built without a number');
+ await run("makeInvoice('deposit')"); var d19=run("window.__doc");
+ ok(d19.indexOf('undefined')<0 && /Reference: <strong>INV-\d{4}-\d{3}<\/strong>/.test(d19),'invoice number and payment reference always filled in');
+ ok(d19.indexOf('signed work contract')<0 && d19.indexOf('Payment is due as per the terms above.')>-1,'footer no longer mentions a signed work contract');
+ ok(d19.indexOf('Quote Reference:</div><div class="client-value">PXT-2026-200<')>-1,'invoice shows the quote ref of the quote it is for');
+ run("localStorage.setItem('poxit_quote_num','1'); window.fetch=function(u,o){ if(o&&o.method==='POST') return Promise.reject('offline'); return Promise.resolve({json:function(){return Promise.resolve({status:'ok',quotes:[{key:'PXT-1',name:'A',ref:'PXT-'+new Date().getFullYear()+'-125'},{key:'PXT-2',name:'B',ref:'PXT-'+new Date().getFullYear()+'-009'}]});}}); };");
+ var q19=await run("nextQuoteRef().then(function(r){return r.ref;})");
+ ok(q19==='PXT-'+new Date().getFullYear()+'-126','offline quote ref carries on from the sheet (PXT-…-126), never restarts at 001 on a new device');
+ run("window.fetch=window.__fo19; window.alert=window.__al19; closeDocOverlay(); confirmReset(false);");
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

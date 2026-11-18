@@ -39,7 +39,7 @@ Run `PXI_setup` then `PXA_setup` once. `PXA_showKey` logs the secret key, `PXA_r
 
 `regeneratePdf` `{ "ref": "PXT-2026-112" }`
 
-Every create, update and regenerate returns `ref`, `key`, `totals` (exGst, gst, incGst), `lines`, `days`, `fileId`, `link`, `fileName`. The PDF (real text) goes to the Quotes folder as `PXT-ref - Client - Address.pdf`, one file per quote updated in place, and the link, totals and date are written back to the quote's row. Nothing here sends email.
+Every create, update and regenerate returns `ref`, `key`, `totals` (exGst, gst, incGst), `lines`, `days`, `fileId`, `link`, `fileName`. The PDF (real text) goes to the Quotes folder as `PXT-ref - Client - Address.pdf`, one file per quote updated in place, and the link, totals and date are written back to the quote's row. Nothing here sends email (see Invoices and email below).
 
 ## Payments (Nov 2026)
 
@@ -47,3 +47,14 @@ Every create, update and regenerate returns `ref`, `key`, `totals` (exGst, gst, 
 - `setPaid` `{ "key": "<secret>", "invNo": "INV-2026-050", "paid": true, "onTime": true }` ticks an invoice paid (and, for a Final with an early payment offer, whether it was paid on time).
 - Invoice Requests now build the same invoice as the tool: payment history (only Paid invoices deducted, unpaid ones listed as outstanding), QBCC deposit limits for domestic jobs, progress invoices numbered per quote, early payment offer on finals.
 - `doPost` is the project's only doPost. Anything it doesn't handle, and any body that isn't JSON, goes to `doGet(e)`.
+
+## Invoices and email (19 Nov 2026)
+
+- One invoice layout. The sheet builds invoices with the tool's own template (bundled in PoxitPricing.gs), so a sheet invoice and a tool invoice for the same job are the same document. Invoice numbers must look like `INV-YYYY-NNN` or nothing is made (no more "undefined").
+- One invoice counter. `nextInvoice` `{ "localLast": 12 }` (no key) returns the next number after the highest one found in: the counter, the Invoices tab, the quotes tab (column O), the Drive Files index, file names in the Drive Invoices folder, and sent Gmail invoices (subjects and attachment names, cached 6 hours). The tool asks this before every invoice and only falls back to its own device counter, with a warning, when the sheet can't be reached.
+- `showInvoiceNumbers` `{}` lists the numbers used and where, the highest, and the next.
+- `setNextInvoiceNo` `{ "number": 40 }` sets the next number (refuses one already used).
+- `renumberInvoice` `{ "invoiceNo": "INV-2026-001", "newNo": "optional" }` gives an unsent, unpaid invoice a new number: same Drive file rebuilt and renamed, Invoices tab, Drive Files index and quote row updated.
+- `draftEmail` `{ "ref": "PXT-2026-125", "client": "optional", "doc": "quote" | "invoice", "invoiceNo": "optional", "to": ["a@b.com"], "cc": [], "subject": "...", "body": "plain text, sign off included" }` makes a Gmail draft from Dominic@poxitflooring.com.au with the latest PDF attached (quote: the quote's Drive PDF; invoice: that invoice, or the latest for the quote) and the signature appended. Returns `draftId`, `from`, `to`, `cc`, `subject`, `body`, `attachment`, `fileId`, `gmailLink`. Sends nothing.
+- `sendDraft` `{ "draftId": "..." }` sends that exact draft and nothing else. Returns `messageId`, `sentAt`, `to`, `cc`, `subject`. Writes the date to the quote's Emailed column (S) and adds a row to the Email Log tab (Date, Quote Ref, Doc, To, Cc, Subject, Draft ID, Invoice No, Message ID, Attachment). A draft can only be sent once.
+- Both email actions also work through the API Requests tab. Claude runs `sendDraft` only after Dom has said yes.
