@@ -2,8 +2,10 @@
 //  POXIT INVOICING  (file: PoxitInvoicing.gs)
 //
 //  Lives in the same Apps Script project as the quote sheet's existing
-//  code, as its own file. It does NOT touch doGet, so quote save/load and
-//  Job Track keep working exactly as before.
+//  code, as its own file. It does NOT change doGet, so quote save/load and
+//  Job Track keep working exactly as before. This is the project's only
+//  doPost: anything it does not handle (and any body that is not JSON) is
+//  passed straight to doGet(e).
 //
 //  What it does
 //   1. doPost: the quote tool's Export button sends the PDF here. Quotes go to
@@ -15,8 +17,10 @@
 //   2. "Invoice Requests" tab: add a row with a quote number and a type
 //      (Deposit, Progress or Final). A 1-minute timer builds the invoice PDF,
 //      saves it to Drive and fills in the results with Status = Done.
-//   3. "Invoices" tab: one row per invoice, with a Paid tick box. A Final
-//      invoice only takes off Deposit and Progress invoices ticked Paid.
+//   3. "Invoices" tab: one row per invoice, with a Paid tick box (and a Paid
+//      On Time tick box for Final invoices with an early payment discount).
+//      Every invoice lists the payment history; only invoices ticked Paid
+//      are taken off.
 //
 //  This script NEVER sends email. There is no MailApp or GmailApp in it.
 //
@@ -55,7 +59,7 @@ var PXI = {
                 'GST In Amount Due', 'Balance After This Invoice', 'File ID', 'Link', 'Message', 'Processed At'],
   INV_HEADERS: ['Invoice No', 'Quote Ref', 'Quote Key', 'Client', 'Type', 'Invoice Date',
                 'Job Total (inc GST)', 'Amount Due (inc GST)', 'GST In Amount Due', 'Paid', 'Paid Date',
-                'Source', 'Entity', 'File ID', 'Link'],
+                'Source', 'Entity', 'File ID', 'Link', 'Progress No', 'Paid On Time', 'Early Payment Discount'],
 
   ENTITIES: {
     'Company': {
@@ -76,17 +80,48 @@ var PXI = {
 //  Web entry point for the quote tool (POST only; GET stays with doGet)
 // ---------------------------------------------------------------------
 function doPost(e) {
+  var body;
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || ''); } catch (err) { body = null; }
+  // not JSON, or not one of ours: hand it to the existing doGet
+  if (!body || typeof body !== 'object' || !PXI_handles_(body.action)) return doGet(e);
   var out;
   try {
-    var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (body.action === 'quoteMeta') out = PXI_quoteMeta_(body);
     else if (body.action === 'savePdf') out = PXI_savePdf_(body);
     else if (body.action === 'nextInvoice') out = PXI_nextInvoice_(body);
-    else out = (typeof PXA_route_ === 'function' && PXA_route_(body)) || { status: 'error', message: 'Unknown action' };
+    else if (body.action === 'ledger') out = PXI_ledger_(body);
+    else if (body.action === 'setPaid') out = (typeof PXA_checkKey_ === 'function' && PXA_checkKey_(body)) || PXI_setPaid_(body);
+    else out = PXA_route_(body);
   } catch (err) {
     out = { status: 'error', message: String(err && err.message || err) };
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+var PXI_OWN_ACTIONS = { quoteMeta: 1, savePdf: 1, nextInvoice: 1, ledger: 1, setPaid: 1 };
+function PXI_handles_(action) {
+  if (!action) return false;
+  if (PXI_OWN_ACTIONS[action]) return true;
+  return typeof PXA_handles_ === 'function' && PXA_handles_(action);
+}
+
+// Every invoice for one quote, for the tool's Payments view and invoice history
+function PXI_ledger_(b) {
+  var key = PXI_clean_(b.quoteKey);
+  if (!key) return { status: 'error', message: 'quoteKey missing' };
+  return { status: 'ok', invoices: PXI_invoicesForKey_(key) };
+}
+// Tick an invoice paid (and, for a Final, whether it was paid on time)
+function PXI_setPaid_(b) {
+  var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
+  var r = PXI_findInvoiceRow_(inv, b.invNo);
+  if (!r) return { status: 'error', message: 'No invoice ' + b.invNo };
+  var paid = b.paid === true;
+  inv.getRange(r, 10).setValue(paid);
+  var pd = inv.getRange(r, 11).getValue();
+  inv.getRange(r, 11).setValue(paid ? (pd || PXI_today_()) : '');
+  inv.getRange(r, 17).setValue(paid && b.onTime === true);
+  inv.getRange(r, 17).insertCheckboxes();
+  return { status: 'ok', invNo: b.invNo, paid: paid, onTime: paid && b.onTime === true };
 }
 
 // Quote tool, after each Save/Update: store entity, location, totals snapshot
@@ -113,19 +148,19 @@ function PXI_writeQuoteTotals_(sh, row, key, entity, location, snap) {
 // Quote tool Export button: save a quote or invoice PDF, updating it if it already exists
 function PXI_savePdf_(b) {
   if (!b.base64) return { status: 'error', message: 'No PDF data' };
-  var kind = b.kind === 'Invoice' ? 'Invoice' : 'Quote';
+  var kind = b.kind === 'Invoice' ? 'Invoice' : b.kind === 'Variation' ? 'Variation' : 'Quote';
   if (kind === 'Invoice' && !b.invNo) return { status: 'error', message: 'Invoice number missing' };
   var bytes = Utilities.base64Decode(String(b.base64).replace(/^data:application\/pdf;base64,/, ''));
   var name = PXI_cleanName_(b.fileName) ||
     (kind === 'Quote' ? PXI_fileName_([b.client, 'Quote', b.ref]) : PXI_fileName_([b.client, (b.invType || 'Tax') + ' Invoice', b.invNo]));
   var blob = Utilities.newBlob(bytes, 'application/pdf', name);
 
-  var saved = PXI_storePdf_({ kind: kind, key: PXI_clean_(b.key), number: kind === 'Quote' ? PXI_clean_(b.ref) : PXI_clean_(b.invNo),
+  var saved = PXI_storePdf_({ kind: kind, key: PXI_clean_(b.key), number: kind === 'Quote' ? PXI_clean_(b.ref) : kind === 'Variation' ? PXI_clean_(b.ref) + '-' + PXI_clean_(b.vid) : PXI_clean_(b.invNo),
                               client: PXI_clean_(b.client), name: name, blob: blob });
 
   var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
   var row = PXI_findQuoteRowByKey_(qs, b.key);
-  if (row) {
+  if (row && kind !== 'Variation') {
     var snap = b.snapshot || { exGst: b.exGst, incGst: b.incGst };
     if (PXI_num_(snap.incGst) > 0) PXI_writeQuoteTotals_(qs, row, b.key, b.entity, b.location, snap);
     PXI_mirrorFiles_(qs, row, b.key);
@@ -139,10 +174,12 @@ function PXI_savePdf_(b) {
     var values = [b.invNo, PXI_clean_(b.ref), PXI_clean_(b.key), PXI_clean_(b.client), PXI_clean_(b.invType) || 'Tax',
       found ? inv.getRange(found, 6).getValue() : PXI_today_(), PXI_round_(PXI_num_(b.jobTotal)), due, PXI_round_(due / 11),
       found ? inv.getRange(found, 10).getValue() === true : false, found ? inv.getRange(found, 11).getValue() : '',
-      'Quote tool', PXI_cleanEntity_(b.entity) || PXI_entityForKey_(b.key), saved.file.getId(), saved.file.getUrl()];
+      'Quote tool', PXI_cleanEntity_(b.entity) || PXI_entityForKey_(b.key), saved.file.getId(), saved.file.getUrl(),
+      PXI_num_(b.progressNo) || '', found ? inv.getRange(found, 17).getValue() === true : false, PXI_round_(PXI_num_(b.earlyDiscount)) || ''];
     var r = found || inv.getLastRow() + 1;
     inv.getRange(r, 1, 1, values.length).setValues([values]);
     inv.getRange(r, 10).insertCheckboxes();
+    inv.getRange(r, 17).insertCheckboxes();
   }
   return { status: 'ok', fileId: saved.file.getId(), link: saved.file.getUrl(), name: name,
            updated: saved.updated, row: row || null,
@@ -153,7 +190,7 @@ function PXI_savePdf_(b) {
 // file, that file gets the new PDF as a new version: same file, same link.
 function PXI_storePdf_(o) {
   var idx = PXI_ss_().getSheetByName(PXI.FILES_TAB);
-  var folderId = o.kind === 'Quote' ? PXI.QUOTES_FOLDER_ID : PXI.INVOICES_FOLDER_ID;
+  var folderId = o.kind === 'Invoice' ? PXI.INVOICES_FOLDER_ID : PXI.QUOTES_FOLDER_ID;
   var hit = PXI_findFileEntry_(idx, o.kind, o.kind === 'Quote' ? o.key : o.number);
   var existing = null;
   if (hit) { try { existing = DriveApp.getFileById(hit.fileId); if (existing.isTrashed()) existing = null; } catch (e) { existing = null; } }
@@ -285,6 +322,9 @@ function PXI_buildInvoiceFromRequest_(q) {
   if (!type) throw new Error('Type must be Deposit, Progress or Final (got "' + q.type + '").');
 
   var quote = PXI_findQuoteForRequest_(q.ref, q.client);
+  var state = PXI_quoteState_(quote.row);
+  if (state && typeof PXP !== 'undefined') return PXI_invoiceFromState_(q, type, quote, state);
+
   var snap = quote.snapshot;
   if (!snap || !(PXI_num_(snap.incGst) > 0)) {
     throw new Error('No saved totals for ' + quote.ref + ' yet. Open the quote in the tool, hit Update once, then clear this Status to retry.');
@@ -302,7 +342,7 @@ function PXI_buildInvoiceFromRequest_(q) {
 
   var amountDue;
   if (type === 'Deposit') {
-    amountDue = PXI_round_(jobTotal * PXI.DEPOSIT_RATE);
+    amountDue = PXI_round_(snap.deposit && snap.deposit.amount > 0 ? snap.deposit.amount : jobTotal * PXI.DEPOSIT_RATE);
     var earlierDeposit = prior.filter(function (p) { return p.type === 'Deposit'; });
     if (earlierDeposit.length) notes.push('Heads up: ' + earlierDeposit.map(function (p) { return p.invNo; }).join(', ') + ' is already a Deposit invoice for this quote.');
   } else if (type === 'Progress') {
@@ -346,6 +386,62 @@ function PXI_buildInvoiceFromRequest_(q) {
 
   return { invNo: invNo, jobTotal: jobTotal, paidToDate: paidToDate, amountDue: amountDue, gst: gst,
            balanceAfter: balanceAfter, fileId: file.getId(), link: file.getUrl(), message: notes.join(' ') };
+}
+
+// The tool's own invoice (payment history, deposit limits, early payment), built from the saved quote
+function PXI_invoiceFromState_(q, type, quote, state) {
+  var stage = { 'Deposit': 'deposit', 'Progress': 'progress', 'Final': 'final' }[type];
+  var ledger = PXI_invoicesForKey_(quote.key);
+  var prices = typeof PXA_prices_ === 'function' ? PXA_prices_() : {};
+  var notes = [];
+  var probe = PXP.invoice({ state: state.state, measureShapes: state.measureShapes, prices: prices, saveKey: quote.key,
+                            stage: stage, amount: q.amount, ledger: ledger, invNo: 'INV-PREVIEW', date: Date.now() });
+  if (type === 'Progress') {
+    var want = PXI_round_(PXI_money_(q.amount));
+    if (!(want > 0)) throw new Error('Progress invoices need a dollar amount (inc GST) in "Progress Amount".');
+    if (want > probe.balanceBefore + 0.005) throw new Error('Progress amount ' + PXI_fmt_(want) + ' is more than what is left on the job (' + PXI_fmt_(probe.balanceBefore) + ').');
+  }
+  if (type === 'Final' && !(probe.amount > 0.004)) throw new Error('Nothing left to invoice: paid to date ' + PXI_fmt_(probe.paidToDate) + ' already covers the job total ' + PXI_fmt_(probe.totalInc) + '.');
+  if (type === 'Deposit') {
+    var dep = ledger.filter(function (p) { return p.type === 'Deposit'; });
+    if (dep.length) notes.push('Heads up: ' + dep.map(function (p) { return p.invNo; }).join(', ') + ' is already a Deposit invoice for this quote.');
+  }
+  if (type === 'Final') {
+    var fin = ledger.filter(function (p) { return p.type === 'Final' && !p.paid; });
+    if (fin.length) notes.push('Heads up: ' + fin.map(function (p) { return p.invNo; }).join(', ') + ' is an earlier Final for this job that is not ticked Paid. Only send one of them.');
+  }
+  var unpaid = ledger.filter(function (p) { return !p.paid && PXI_BILLS_[p.type]; });
+  if (unpaid.length) notes.push('Not taken off because they are not ticked Paid: ' + unpaid.map(function (p) { return p.invNo + ' ' + p.type + ' ' + PXI_fmt_(p.amount); }).join(', ') + '. They are listed on the invoice as outstanding.');
+
+  var invNo = PXI_invRef_(PXI_takeInvoiceNumber_(0));
+  var res = PXP.invoice({ state: state.state, measureShapes: state.measureShapes, prices: prices, saveKey: quote.key,
+                          stage: stage, amount: q.amount, ledger: ledger, invNo: invNo, date: Date.now(), notes: q.notes });
+  var html = typeof PXA_serverHtml_ === 'function' ? PXA_serverHtml_(res.html) : res.html;
+  var c = state.state.client || {};
+  var name = PXI_fileName_([quote.client, c.area || '', (type + ' Invoice' + (res.progressNo ? ' ' + res.progressNo : '')), invNo]);
+  var pdf = Utilities.newBlob(html, 'text/html', name.replace(/\.pdf$/, '.html')).getAs('application/pdf').setName(name);
+  var file = PXI_storePdf_({ kind: 'Invoice', key: quote.key, number: invNo, client: quote.client, name: name, blob: pdf }).file;
+  var inv = PXI_ss_().getSheetByName(PXI.INV_TAB);
+  var r = inv.getLastRow() + 1;
+  inv.getRange(r, 1, 1, PXI.INV_HEADERS.length).setValues([[invNo, quote.ref, quote.key, quote.client, type, PXI_today_(),
+    res.totalInc, res.amount, res.gst, false, '', 'Invoice Request', quote.entity, file.getId(), file.getUrl(),
+    res.progressNo || '', false, res.earlyDiscount || '']]);
+  inv.getRange(r, 10).insertCheckboxes();
+  inv.getRange(r, 17).insertCheckboxes();
+  var qs = PXI_ss_().getSheetByName(PXI.QUOTES_TAB);
+  var qrow = PXI_findQuoteRowByKey_(qs, quote.key);
+  if (qrow) PXI_mirrorFiles_(qs, qrow, quote.key);
+  if (res.earlyDiscount) notes.push('Early payment offer on this invoice: pay ' + PXI_fmt_(res.amount - res.earlyDiscount) + ' by 11:59pm today to save ' + PXI_fmt_(res.earlyDiscount) + '.');
+  return { invNo: invNo, jobTotal: res.totalInc, paidToDate: res.paidToDate, amountDue: res.amount, gst: res.gst,
+           balanceAfter: res.balanceAfter, fileId: file.getId(), link: file.getUrl(), message: notes.join(' ') };
+}
+var PXI_BILLS_ = { 'Deposit': 1, 'Progress': 1, 'Final': 1, 'Full Payment': 1, 'Full': 1 };
+function PXI_quoteState_(row) {
+  try {
+    var raw = PXI_ss_().getSheetByName(PXI.QUOTES_TAB).getRange(row, PXI.Q.PAYLOAD).getValue();
+    var p = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return p && p.state ? { state: p.state, measureShapes: p.measureShapes || [] } : null;
+  } catch (e) { return null; }
 }
 
 // ---------------------------------------------------------------------
@@ -397,8 +493,12 @@ function PXI_invoicesForKey_(key) {
   return inv.getRange(2, 1, inv.getLastRow() - 1, PXI.INV_HEADERS.length).getValues()
     .filter(function (r) { return String(r[2]) === String(key); })
     .map(function (r) {
-      return { invNo: String(r[0]), type: String(r[4]), amountDue: PXI_num_(r[7]),
-               paid: r[9] === true || String(r[9]).toUpperCase() === 'TRUE' };
+      var d = r[5];
+      return { invNo: String(r[0]), type: String(r[4]), amountDue: PXI_num_(r[7]), amount: PXI_num_(r[7]),
+               date: Object.prototype.toString.call(d) === '[object Date]' ? Utilities.formatDate(d, PXI.TZ, 'dd/MM/yyyy') : String(d || ''),
+               paid: r[9] === true || String(r[9]).toUpperCase() === 'TRUE',
+               progressNo: PXI_num_(r[15]) || 0, onTime: r[16] === true || String(r[16]).toUpperCase() === 'TRUE',
+               earlyDiscount: PXI_num_(r[17]) };
     });
 }
 

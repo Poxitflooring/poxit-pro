@@ -10,7 +10,7 @@ setTimeout(async ()=>{try{
  const total=()=>run('calcAll()');
  const sec=(k)=>run(`JSON.stringify(buildSections().find(s=>s.key==='${k}')||null)`);
  // Legacy checks run with the Site auto-fill switched off, so their expected totals stay exact
- run("window.__freshStateAuto=freshState; freshState=function(){ const s=window.__freshStateAuto(); s.auto={days:false,travel:false,waste:false}; return s; }; S.auto={days:false,travel:false,waste:false};");
+ run("window.__freshStateAuto=freshState; freshState=function(){ const s=window.__freshStateAuto(); s.auto={days:false,travel:false,waste:false}; s.client.jobType='Commercial'; return s; }; S.auto={days:false,travel:false,waste:false}; S.client.jobType='Commercial';");
  run("window.__realOpenDoc=openDoc; window.__realRender=renderPdfBlob; renderPdfBlob=function(){ return new Promise(function(){}); };");
  run("showTab('repairs')");
  ok(w.document.getElementById('cancerList')!==null,'cancer card present');
@@ -313,10 +313,10 @@ setTimeout(async ()=>{try{
  ok(d1.indexOf('5,120')>=0 && d1.indexOf('1,280')>=0,'breakdown toggle shows annual + per visit');
  run("window.__doc=''; openDoc=function(h){window.__doc=h;}; generatePDF();");
  ok(run("window.__doc").indexOf('Pressure Clean Plan')>=0,'plan box lands on quote PDF');
- run("S.pwPlan.showInvoice=false; generateInvoice();"); await run("window.__invoiceDone");
+ run("S.pwPlan.showInvoice=false; makeInvoice('deposit');"); await run("window.__invoiceDone");
  var inv=run("window.__doc");
  ok(inv.indexOf('Pressure Clean Plan')>=0 && inv.indexOf('Annual (Ex GST)')<0,'invoice shows plan, breakdown off independently');
- run("S.pwPlan.showInvoice=true; generateInvoice();"); await run("window.__invoiceDone");
+ run("S.pwPlan.showInvoice=true; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(run("window.__doc").indexOf('Annual (Ex GST)')>=0,'invoice breakdown toggle works');
  run("S.pwPlan.enabled=false; calcAll(); generatePDF();");
  ok(run("window.__doc").indexOf('Pressure Clean Plan')<0,'plan off = nothing on quote');
@@ -373,7 +373,7 @@ setTimeout(async ()=>{try{
  run("setPwPlanPay(0,'Yearly Upfront');"); var py=run("pwPlanDocHTML(false)");
  ok(py.indexOf('5,350.40')>=0 && py.indexOf('469.33')<0,'Yearly shows yearly only');
  ok(!/[\u2014\u2013]/.test(pm+py),'no dashes in payment copy');
- run("window.__doc=''; openDoc=function(h){window.__doc=h;}; generateInvoice();"); await run("window.__invoiceDone");
+ run("window.__doc=''; openDoc=function(h){window.__doc=h;}; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(run("window.__doc").indexOf('5,350.40')>=0 && run("window.__doc").indexOf('469.33')<0,'invoice follows chosen payment');
  run("var o6=JSON.parse(JSON.stringify({state:S})); delete o6.state.pwPlan.pay; confirmReset(false); restoreQuote(o6);");
  ok(run("S.pwPlan.pay")==='Client Chooses','older quotes default to client chooses');
@@ -382,7 +382,7 @@ setTimeout(async ()=>{try{
  run("confirmReset(false); S.client.first='Mario'; S.client.last='Fairlie'; S.client.area='Garage'; S.client.ref='PXT-2026-014'; S.services={epoxy:true}; calcAll();");
  run("window.__doc=''; openDoc=function(h){window.__doc=h;}; generatePDF();");
  ok(run("window.__doc").indexOf('<title>Mario Fairlie - Garage - Epoxy Quote - PXT-2026-014</title>')>=0,'quote file name: name, area, job, ref');
- run("window.__doc=''; generateInvoice();"); await run("window.__invoiceDone");
+ run("window.__doc=''; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(/<title>Mario Fairlie - Garage - Epoxy Deposit Invoice - INV-\d{4}-\d{3}<\/title>/.test(run("window.__doc")),'invoice file name ends in invoice number (opens as deposit)');
  run("S.client.area=''; S.epoxyZones=[{name:'Patio'}];");
  ok(run("docFileName('Quote','PXT-1')")==='Mario Fairlie - Patio - Epoxy Quote - PXT-1','blank area falls back to zone name');
@@ -471,7 +471,7 @@ setTimeout(async ()=>{try{
  // ===== company details on documents =====
  run("closeDocOverlay(); window.__bsb=COMPANY.bankBSB; window.__acct=COMPANY.bankAccount; COMPANY.bankBSB=''; COMPANY.bankAccount=''; confirmReset(false); S.client.first='Mario'; S.client.last='Fairlie'; S.client.area='Garage'; S.client.ref='PXT-2026-014'; S.services={epoxy:true}; calcAll(); window.__alc=0; window.__alo2=window.alert; window.alert=function(){window.__alc++;}; window.__doc=''; openDoc=function(h){window.__doc=h;};");
  run("generatePDF();"); var qd=run("window.__doc");
- run("generateInvoice();"); await run("window.__invoiceDone"); var idoc=run("window.__doc");
+ run("makeInvoice('deposit');"); await run("window.__invoiceDone"); var idoc=run("window.__doc");
  var idLine='Poxit Flooring Pty Ltd&nbsp;&nbsp;|&nbsp;&nbsp;ABN 23 702 727 535&nbsp;&nbsp;|&nbsp;&nbsp;ACN 702 727 535';
  ok(qd.indexOf('<div class="doc-company">'+idLine+'</div>')>=0,'quote header shows company, ABN and ACN');
  ok(idoc.indexOf('<div class="doc-company">'+idLine+'</div>')>=0,'invoice header shows company, ABN and ACN');
@@ -484,10 +484,10 @@ setTimeout(async ()=>{try{
  ok(!/CEO|Sole Trader/i.test(qd+idoc),'no CEO or Sole Trader wording');
  ok(run("window.__alc")===1,'warns before an invoice goes out without bank details');
  ok(run("window.__alc")===1 && idoc.indexOf('[FILL IN]')>=0,'unset bank details show [FILL IN]');
- run("COMPANY.bankBSB='000 000'; COMPANY.bankAccount='12345678'; window.__alc=0; generateInvoice();"); await run("window.__invoiceDone");
+ run("COMPANY.bankBSB='000 000'; COMPANY.bankAccount='12345678'; window.__alc=0; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(run("window.__alc")===0 && run("window.__doc").indexOf('BSB: <strong>000 000</strong>')>=0 && run("window.__doc").indexOf('Account: <strong>12345678</strong>')>=0,'filled bank details print with no warning');
  run("COMPANY.bankBSB=window.__bsb; COMPANY.bankAccount=window.__acct; window.alert=window.__alo2; confirmReset(false);");
- run("window.__alc=0; window.__alo5=window.alert; window.alert=function(){window.__alc++;}; window.__doc=''; openDoc=function(h){window.__doc=h;}; generateInvoice();"); await run("window.__invoiceDone");
+ run("window.__alc=0; window.__alo5=window.alert; window.alert=function(){window.__alc++;}; window.__doc=''; openDoc=function(h){window.__doc=h;}; makeInvoice('deposit');"); await run("window.__invoiceDone");
  ok(run("window.__doc").indexOf('Account Name: <strong>Poxit Flooring Pty Ltd</strong><br>BSB: <strong>067 873</strong>&nbsp;&nbsp;&nbsp;Account: <strong>26553862</strong>')>=0,'live invoice prints the company BSB and account');
  ok(run("window.__alc")===0 && run("window.__doc").indexOf('[FILL IN]')<0,'live invoice has no FILL IN and no warning');
  run("window.alert=window.__alo5; confirmReset(false);");
@@ -508,27 +508,17 @@ setTimeout(async ()=>{try{
  ok(run("window.__doc").indexOf(dTod)>=0,'quote PDF prints the saved date');
  run("window.alert=window.__alo3; confirmReset(false);");
  // ===== invoice names follow the payment stage =====
- run("closeDocOverlay(); confirmReset(false); S.client.first='Mario'; S.client.last='Fairlie'; S.client.area='Garage'; S.services={epoxy:true}; calcAll(); window.__alo4=window.alert; window.alert=function(){}; window.__doc=''; openDoc=function(h){window.__doc=h;}; generateInvoice();"); await run("window.__invoiceDone");
+ run("closeDocOverlay(); confirmReset(false); S.client.first='Mario'; S.client.last='Fairlie'; S.client.area='Garage'; S.services={epoxy:true}; calcAll(); window.__alo4=window.alert; window.alert=function(){}; window.__doc=''; openDoc=function(h){window.__doc=h;}; makeInvoice('deposit');"); await run("window.__invoiceDone");
  var invHtml=run("window.__doc"); var invRef=(invHtml.match(/INV-\d{4}-\d{3}/)||[''])[0];
  ok(invHtml.indexOf('<title>Mario Fairlie - Garage - Epoxy Deposit Invoice - '+invRef+'</title>')>=0,'invoice opens named as the deposit invoice');
- // run the invoice page in its own sandbox and click each payment stage
- var invDom=new JSDOM(invHtml,{runScripts:'dangerously'}); var iw=invDom.window, idd=iw.document;
- iw.print=function(){};
- Object.defineProperty(iw,'parent',{value:{ onDocTermsChanged:function(tt,s){ dom.window.onDocTermsChanged(tt,s); } }});
- var clickStage=function(k){ [].slice.call(idd.querySelectorAll('.terms-btn')).filter(function(x){return x.getAttribute('onclick').indexOf("'"+k+"'")>=0;})[0].click(); };
- ok(idd.querySelectorAll('.terms-btn').length===4,'invoice has the four payment stage buttons');
- var stages=[['final','Final Invoice'],['full','Full Payment Invoice'],['paid','Paid Invoice'],['deposit','Deposit Invoice']];
- run("window.__docTitle='';");
+ // each payment stage is its own invoice, named by stage
+ var stages=[['final','Final Invoice'],['full','Full Payment Invoice'],['paid','Paid Invoice'],['progress','Progress Invoice 1']];
  for (var si=0; si<stages.length; si++) {
-   clickStage(stages[si][0]);
-   ok(idd.title==='Mario Fairlie - Garage - Epoxy '+stages[si][1]+' - '+invRef,stages[si][0]+' stage names the file '+stages[si][1]);
-   ok(run("docPdfName()")==='Mario Fairlie - Garage - Epoxy '+stages[si][1]+' - '+invRef+'.pdf','in app PDF named '+stages[si][1]);
+   await run("makeInvoice('"+stages[si][0]+"', 100)");
+   var sref=(run("window.__doc").match(/INV-\d{4}-\d{3}/)||[''])[0];
+   ok(run("window.__doc").indexOf('<title>Mario Fairlie - Garage - Epoxy '+stages[si][1]+' - '+sref+'</title>')>=0, stages[si][0]+' invoice is named '+stages[si][1]);
  }
- // a made PDF goes stale when the stage changes
- run("window.navigator.__defineGetter__('standalone',function(){return true;}); closeDocOverlay(); showDocOverlay(window.__doc); window.__docPdf={name:'old.pdf'}; setExportBtn('⬆ Export', false);");
- clickStage('final');
- ok(run("window.__docPdf")===null && run("document.getElementById('docExportBtn').disabled")===true && run("docCtx.stage")==='final','changing stage drops the old PDF and holds Export until the new one is made');
- run("window.navigator.__defineGetter__('standalone',function(){return false;}); closeDocOverlay(); window.alert=window.__alo4; confirmReset(false);");
+ run("closeDocOverlay(); window.alert=window.__alo4; confirmReset(false);");
  // ===== Location: Internal / External / Both =====
  run("closeDocOverlay(); window.confirm=function(){return true;}; confirmReset(false); window.__alo6=window.alert; window.__al6=[]; window.alert=function(m){window.__al6.push(m);}; window.confirm=function(){return false;}; window.__fu=[]; window.__fo=window.fetch; window.fetch=function(u){ window.__fu.push(String(u)); return Promise.reject(new Error('offline')); };");
  ok(run("S.client.location")==='','new quote starts with no location');
@@ -605,7 +595,7 @@ setTimeout(async ()=>{try{
  run("S.client.first='Ent'; S.client.last='Test'; S.services={epoxy:true}; S.epoxyZones=[{name:'Garage',sys:'Flake Internal',flake:'Standard',conc:'Hard',coat:'Single Paint',area:40,addons:{}}]; calcAll(); window.__doc=''; openDoc=function(h){window.__doc=h;}; window.__qs=null;");
  run("S.client.entity='Sole Trader';");
  run("generatePDF();"); var stq=run("window.__doc");
- await run("window.__invoiceDone=null; generateInvoice()"); var sti=run("window.__doc");
+ await run("window.__invoiceDone=null; makeInvoice('deposit')"); var sti=run("window.__doc");
  ok(stq.indexOf('Poxit Flooring&nbsp;&nbsp;|&nbsp;&nbsp;ABN 11 743 009 073</div>')>=0 && stq.indexOf('ACN')<0,'sole trader quote header: old ABN, no ACN');
  ok(sti.indexOf('Account: <strong>17789072</strong>')>=0 && sti.indexOf('26553862')<0 && sti.indexOf('Account Name: <strong>Poxit Flooring</strong>')>=0,'sole trader invoice uses the old account');
  ok(sti.indexOf('Gold Coast, QLD')>=0 && sti.indexOf('Dorretti')<0,'sole trader footer has no company address');
@@ -639,7 +629,7 @@ setTimeout(async ()=>{try{
  ok(run("document.getElementById('driveNote').textContent").indexOf('Saved to Drive')>=0,'says it saved to Drive');
  // invoices: shared number, Export saves the stage on screen
  run("window.__posts=[]; localStorage.setItem('poxit_inv_num','7'); closeDocOverlay();");
- await run("generateInvoice()"); await run("window.__docPdfReady");
+ await run("makeInvoice('deposit')"); await run("window.__docPdfReady");
  var invDoc=run("docCtx.html");
  var srvN=run("window.__srv.nextNum"); var srvRef='INV-2026-0'+srvN;
  ok(srvN>41 && invDoc.indexOf('TAX INVOICE · '+srvRef)>=0,'invoice number comes from the sheet counter');
@@ -647,25 +637,15 @@ setTimeout(async ()=>{try{
  var nx=JSON.parse(run("JSON.stringify(window.__posts.filter(function(p){return p.action==='nextInvoice';}))"));
  ok(nx.length===1 && nx[0].localLast===7,'device sends its last number so the sheet never goes backwards');
  ok(run("window.__posts.filter(function(p){return p.action==='savePdf';}).length")===0,'opening an invoice saves nothing to Drive until Export');
- ok(run("window.__renders[window.__renders.length-1]").indexOf('<div id="terms-deposit" class="payment-box">')>=0 && run("window.__renders[window.__renders.length-1]").indexOf('<div id="terms-final" class="payment-box" style="display:none;">')>=0,'PDF starts on the deposit stage');
  await run("exportDoc()");
  var inc=qtot*1.1;
  var isv=JSON.parse(run("JSON.stringify(window.__posts.filter(function(p){return p.action==='savePdf';}))"));
  ok(isv.length===1 && isv[0].kind==='Invoice' && isv[0].invNo===srvRef && isv[0].invType==='Deposit' && Math.abs(isv[0].amountDue-inc/2)<0.01 && Math.abs(isv[0].jobTotal-inc)<0.01 && /Deposit Invoice - INV-/.test(isv[0].fileName),'Export saves the invoice as the Deposit stage, named by stage and number');
- run("window.__posts=[]; onDocTermsChanged('Ent Test - Garage - Epoxy Final Invoice - '+'"+srvRef+"','final');");
- ok(run("document.getElementById('docExportBtn').disabled")===true,'Export waits while the new stage is made');
- await new Promise(function(r){setTimeout(r,500);}); await run("window.__docPdfReady");
- ok(run("window.__renders[window.__renders.length-1]").indexOf('<div id="terms-final" class="payment-box">')>=0,'changing the stage remakes the PDF for that stage');
+ run("window.__posts=[]; closeDocOverlay();");
+ await run("makeInvoice('final')"); await run("window.__docPdfReady");
  await run("exportDoc()");
  var st=JSON.parse(run("JSON.stringify(window.__posts.filter(function(p){return p.action==='savePdf';}))"));
- ok(st.length===1 && st[0].invNo===srvRef && st[0].invType==='Final' && Math.abs(st[0].amountDue-inc/2)<0.01 && /Final Invoice - INV-/.test(st[0].fileName),'Export after switching saves the Final invoice under the same number');
- run("window.__posts=[]; onDocTermsChanged('a','paid'); onDocTermsChanged('b','full');"); await new Promise(function(r){setTimeout(r,500);}); await run("window.__docPdfReady");
- ok(run("docCtx.stage")==='full' && run("window.__renders[window.__renders.length-1]").indexOf('<div id="terms-full" class="payment-box">')>=0,'quick stage taps end on the last one picked');
- // the invoice page reports stage changes from the in-app view (parent) or a new tab (opener)
- var tabDom=new JSDOM(invDoc,{runScripts:'dangerously'}); tabDom.window.print=function(){};
- var gotStage=null; Object.defineProperty(tabDom.window,'opener',{value:{onDocTermsChanged:function(t,s){gotStage=s;}}});
- [].slice.call(tabDom.window.document.querySelectorAll('.terms-btn')).filter(function(x){return x.getAttribute('onclick').indexOf("'final'")>=0;})[0].click();
- ok(gotStage==='final','invoice page reports the stage back to the tool');
+ ok(st.length===1 && st[0].invType==='Final' && Math.abs(st[0].amountDue-inc)<0.01 && /Final Invoice - INV-/.test(st[0].fileName),'Final invoice exports as Final for the full balance (no payments recorded)');
  // Drive replies: updated version, offline, script not updated
  run("window.__srv.mode='ok'; window.__fo8=window.fetch; window.fetch=function(u,o){ if(o&&o.method==='POST'){ var b=JSON.parse(o.body); if(b.action==='savePdf') return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',updated:true}));}}); } return window.__fo8(u,o); };");
  await run("exportDoc()");
@@ -677,7 +657,7 @@ setTimeout(async ()=>{try{
  await run("exportDoc()");
  ok(run("document.getElementById('driveNote').textContent").indexOf('not switched on yet')>=0,'before the script is updated: says Drive saving is not switched on yet');
  run("window.__srv.mode='down'; closeDocOverlay(); localStorage.setItem('poxit_inv_num','50');");
- await run("generateInvoice()");
+ await run("makeInvoice('deposit')");
  ok(run("docCtx.html").indexOf('· INV-2026-051')>=0 && run("localStorage.getItem('poxit_inv_num')")==='51','offline: invoice falls back to the device counter');
  run("closeDocOverlay(); window.__srv.mode='ok'; window.fetch=window.__fo7; window.alert=window.__alo7; renderPdfBlob=function(){ return new Promise(function(){}); }; confirmReset(false);");
  // ===== PDF maker: self-hosted, and never started on the frame's blank page =====
@@ -714,7 +694,7 @@ setTimeout(async ()=>{try{
  run("generatePDF();"); var d1=run("window.__doc");
  ok(d1.indexOf('Spalling Repair (Cementitious)')>=0 && d1.indexOf('<strong>Cementitious repairs:</strong> Poxit Flooring\'s workmanship warranty does not cover the repaired areas, or any coating failure caused by them. Statutory warranties under Queensland law still apply.')>=0,'cementitious on the quote adds the warranty note to the terms');
  ok(d1.indexOf('Payment Terms')<d1.indexOf('Cementitious repairs:'),'note sits in the Payment Terms section');
- await run("generateInvoice()"); var i1=run("window.__doc");
+ await run("makeInvoice('deposit')"); var i1=run("window.__doc");
  ok(i1.indexOf('workmanship warranty does not cover the repaired areas')>=0,'cementitious invoice carries the note too');
  // both, not as options: both in the total, switch offered
  run("S.spalling={small:2,med:1,large:1,area:0}; calcAll();");
@@ -733,14 +713,14 @@ setTimeout(async ()=>{try{
  ok(d2.indexOf('Choose Option 2 instead and the total becomes $242.00 inc GST')>=0,'says what the total becomes with the other option');
  ok(d2.indexOf('workmanship warranty does not cover')>=0,'cementitious offered as an option still carries the note');
  ok(!/[—–]/.test(spallBox=d2.slice(d2.indexOf('Spalling Repair Options'), d2.indexOf('Payment Terms'))),'options wording has no dashes');
- await run("generateInvoice()"); var i2=run("window.__doc");
+ await run("makeInvoice('deposit')"); var i2=run("window.__doc");
  ok(i2.indexOf('workmanship warranty does not cover')<0 && i2.indexOf('Spalling Repair Options')<0,'invoice for Option 1 bills epoxy only, no cementitious note');
  // switch to Option 2 in the total
  run("var sel=document.getElementById('spallIncludeSel'); sel.value='cem'; sel.dispatchEvent(new Event('change',{bubbles:true}));");
  ok(run("S.spallingOpt.include")==='cem' && run("calcAll()")===220,'picking Option 2 puts cementitious in the total instead');
  run("generatePDF();"); var d3=run("window.__doc");
  ok(d3.indexOf('Spalling Repair (Cementitious): Option 2')>=0 && d3.indexOf('Quote Total (Inc GST)</td><td class="price-col">$242.00')>=0 && d3.indexOf('Choose Option 1 instead and the total becomes $236.50 inc GST')>=0,'quote follows Option 2');
- await run("generateInvoice()");
+ await run("makeInvoice('deposit')");
  ok(run("window.__doc").indexOf('workmanship warranty does not cover')>=0,'invoice for Option 2 carries the note');
  // other work and a % discount flow through both option totals
  run("S.spallingOpt.include='epoxy'; S.cracks=[{lm:5,qty:1}]; S.custom.adjustType='discount_pct'; S.custom.adjustAmount=10; calcAll();");
@@ -851,7 +831,7 @@ setTimeout(async ()=>{try{
  ok(ed.indexOf('<span class="zone-cat">Site induction</span>')>=0 && ed.indexOf('Half day, two staff')>=0 && ed.indexOf('2 hr @ $95.00/hr')>=0 && ed.indexOf('$190.00')>=0,'PDF shows the custom line exactly');
  ok(ed.indexOf('Crack Repair')<0,'PDF leaves out the deleted line');
  ok(ed.indexOf('Quote Total (Inc GST)</td><td class="price-col">$3,839.00')>=0,'PDF totals match the edits (3,300 + 190 = 3,490 + GST)');
- await run("generateInvoice()"); ok(run("window.__doc").indexOf('Garage floor, full flake system')>=0 && run("window.__doc").indexOf('Crack Repair')<0,'invoice uses the edited lines too');
+ await run("makeInvoice('deposit')"); ok(run("window.__doc").indexOf('Garage floor, full flake system')>=0 && run("window.__doc").indexOf('Crack Repair')<0,'invoice uses the edited lines too');
  var snE=JSON.parse(run("JSON.stringify(quoteSnapshot())"));
  ok(Math.abs(snE.exGst-3490)<0.01 && snE.lines.some(function(l){return l.category==='Garage floor, full flake system' && l.amount===3300;}) && snE.lines.some(function(l){return l.category==='Site induction' && l.amount===190;}),'totals sent to the sheet use the edits');
  // edits survive save and reopen
@@ -866,7 +846,7 @@ setTimeout(async ()=>{try{
  // ===================== 17 NOV: FLOW, PRICING, SITE =====================
  run("closeDocOverlay(); window.confirm=function(){return true;}; window.alert=function(){}; openDoc=function(h){window.__doc=h;}; freshState=window.__freshStateAuto; localStorage.removeItem('poxit_prices'); applyPriceOverrides({}); confirmReset(false); measureShapes=[];");
  ok(run("JSON.stringify(NAV)")===JSON.stringify(['client','measure','services','site','review','save']),'FLOW step order Client > Measure > Services > Site > Review > Save');
- ok(run("[].map.call(document.querySelectorAll('.tab[data-tab]'),function(t){return t.getAttribute('data-tab');}).join(',')")==='client,measure,services,site,review,save','FLOW tab bar shows the six steps only');
+ ok(run("[].map.call(document.querySelectorAll('.tab[data-tab]'),function(t){return t.getAttribute('data-tab');}).join(',')")==='client,measure,services,site,review,save,close','FLOW tab bar shows the six steps, then Close (outside the Next flow)');
  ok(!run("document.querySelector('.tab[data-tab=\"addons\"]')") && !run("document.getElementById('tab-addons')"),'FLOW no separate Add-Ons step');
  run("showTab('details')"); ok(run("currentTab")==='services' && run("document.getElementById('sub-floors').classList.contains('active')"),'FLOW old step names open the right Services panel');
  run("showTab('client'); nextTab(); nextTab(); nextTab();"); ok(run("currentTab")==='site','FLOW Next walks Client > Measure > Services > Site');
@@ -990,5 +970,91 @@ setTimeout(async ()=>{try{
  ok(run("document.getElementById('saveStatus').innerHTML").indexOf('PXT-')>-1,'SAVE step shows the saved ref');
  ok(run("driveQuoteName()")==='PXT-'+new Date().getFullYear()+'-213 - Ref Test.pdf','DRIVE name "PXT-ref - Client - Address.pdf"');
  run("confirmReset(false);");
+ function r2(n){return Math.round(n*100)/100;} function fmtW(n){return '$'+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
+ // ===================== 18 NOV: PRICING, OFFERS, DEPOSITS, INVOICES =====================
+ run("closeDocOverlay(); window.confirm=function(){return true;}; window.alert=function(){}; openDoc=function(h){window.__doc=h;}; freshState=window.__freshStateAuto; applyPriceOverrides({}); confirmReset(false); measureShapes=[]; S.auto={days:false,travel:false,waste:false};");
+ // 1. pressure washing and ramping
+ run("S.pwZones=[{name:'Drive',area:100}]; S.pwJob.tier='Standard'; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-800)<0.001,'PW Standard 100m² = $8/m² = $800');
+ run("S.pwZones[0].area=120; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-720)<0.001 && JSON.parse(sec('pw')).addons[0].label.indexOf('$6/m²')>-1,'PW Standard 120m² = whole area at $6 = $720');
+ run("S.pwZones[0].area=20; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-250)<0.001,'PW $250 minimum kept');
+ run("S.pwZones[0].area=150; S.pwJob.tier='Basic'; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-750)<0.001,'PW Basic tier unchanged ($5/m²)');
+ run("S.pwZones=[]; S.pwJob.tier='Standard'; S.ramps=[{name:'Garage lip',rise:50,width:1,ratio:12,material:'epoxysand'}]; calcAll();");
+ ok(Math.abs(JSON.parse(sec('ramping')).subtotal-330)<0.001,'RAMP 2 batches x $55 x 3 = $330');
+ run("S.ramps[0].rise=20; calcAll();"); ok(Math.abs(JSON.parse(sec('ramping')).subtotal-250)<0.001,'RAMP 1 batch ($165) lifts to the $250 minimum');
+ run("S.ramps=[]; calcAll();");
+ // 2-5. offers on a dummy quote: epoxy 45m² + patio seal 30m²
+ run("S.client.first='Offer'; S.client.last='Test'; S.client.location='Internal'; S.services.epoxy=true; S.services.seal=true; addZone('epoxy'); S.epoxyZones[0].name='Garage'; S.epoxyZones[0].area=45; addZone('seal'); S.sealZones[0].name='Patio'; S.sealZones[0].area=30; calcAll();");
+ ok(Math.abs(total()-4650)<0.001,'OFFERS base job $4,650 ex GST');
+ run("setOffer('warranty','extended')"); ok(Math.abs(total()-4650*1.1)<0.001,'WARRANTY 5 years = 10% of job ex GST ($465)');
+ run("savePriceTable({'offers|warrantyCap':300})"); ok(Math.abs(total()-4950)<0.001,'WARRANTY cap setting ($300)');
+ run("savePriceTable({}); generatePDF();"); var wd=run("window.__doc");
+ ok((wd.match(/Workmanship warranty: 5 years/g)||[]).length===2,'WARRANTY printed per system (5 years on both systems)');
+ ok(wd.indexOf('Extend to 5 year workmanship warranty')>-1 && wd.indexOf('Or get the 5 year warranty included with our top Care Plan (includes a maintenance topcoat)')>-1,'WARRANTY both choices on the quote');
+ run("setOffer('warranty','careplan')"); ok(Math.abs(total()-4650)<0.001 && run("warrantyText()").indexOf('top Care Plan')>-1,'WARRANTY Care Plan option: 5 years, no charge on the job');
+ run("setOffer('warranty','standard'); generatePDF();"); ok((run("window.__doc").match(/Workmanship warranty: 1 year</g)||[]).length===2,'WARRANTY standard 1 year per system');
+ run("setOffer('priority',true)"); ok(Math.abs(total()-(4650+250))<0.001,'PRIORITY 5% ($232.50) lifts to the $250 minimum');
+ run("generatePDF()"); ok(run("window.__doc").indexOf('Priority start: within 7 days of deposit.')>-1,'PRIORITY quote shows the priority start');
+ run("S.epoxyZones[0].area=400; calcAll();"); ok(Math.abs(run("quoteMoney().extras.find(function(x){return x.key==='priority';}).ex")-1500)<0.001,'PRIORITY capped at $1,500');
+ run("S.epoxyZones[0].area=45; setOffer('priority',false); generatePDF();"); ok(run("window.__doc").indexOf('Start date confirmed on deposit.')>-1,'PRIORITY standard shows "Start date confirmed on deposit"');
+ run("setOffer('bundle',true)"); var mb=JSON.parse(run("JSON.stringify(quoteMoney().extras)"));
+ ok(mb.length===1 && mb[0].label==='Bundle discount: 10% off Patio' && Math.abs(mb[0].ex+60)<0.001,'BUNDLE 10% off the second area ($60 off Patio)');
+ run("setOffer('bookNow',true)"); var bn=JSON.parse(run("JSON.stringify(quoteMoney().extras.find(function(x){return x.key==='bookNow';}))"));
+ ok(bn && bn.inc===-101 && Math.abs(run("quoteMoney().incGst")-(4590*1.1-101))<0.001,'BOOK NOW 2% of $5,049 inc GST rounds to $101 off');
+ run("setOffer('careCredit',true)"); ok(run("S.offers.careCredit")===false && run("offerLimitText()").indexOf('Bundle discount + Book today')>-1,'LIMIT a third discount is blocked and the two active ones are named');
+ run("setOffer('priority',true)"); ok(run("S.offers.priority")===true,'LIMIT paid upgrades never count toward the two');
+ run("setOffer('priority',false); setOffer('bookNow',false); setOffer('careCredit',true);"); ok(Math.abs(run("quoteMoney().extras.find(function(x){return x.key==='careCredit';}).ex")+169)<0.001,'CARE CREDIT 75m² floor = Basic $169 off');
+ run("showTab('review')"); ok(run("document.getElementById('offersBox').innerHTML").indexOf('Two offer limit reached')>-1,'LIMIT shown on the Review step');
+ run("setOffer('careCredit',false); setOffer('bookNow',true);");
+ // 7. deposits
+ var inc1=run("quoteMoney().incGst");
+ ok(Math.abs(run("quoteMoney().deposit.amount")-r2(inc1*0.10))<0.001 && run("quoteMoney().deposit.pct")===10,'DEPOSIT domestic $3,301 to $19,999 = 10%');
+ run("generatePDF()"); ok(run("window.__doc").indexOf('50%')<0 && run("window.__doc").indexOf('10% deposit')>-1 && run("window.__doc").indexOf('QBCC')>-1,'DEPOSIT domestic quote never says 50%');
+ run("setJobType('Commercial'); generatePDF();"); ok(run("quoteMoney().deposit.pct")===50 && run("window.__doc").indexOf('50% deposit')>-1,'DEPOSIT commercial 50%');
+ run("setJobType('Domestic'); S.epoxyZones[0].area=10; S.sealZones=[]; S.offers.bundle=false; S.offers.bookNow=false; calcAll();"); ok(run("quoteMoney().deposit.pct")===20,'DEPOSIT domestic up to $3,300 = 20%');
+ run("S.epoxyZones[0].area=300; calcAll();"); ok(run("quoteMoney().deposit.pct")===5,'DEPOSIT domestic $20,000 and over = 5%');
+ run("S.epoxyZones[0].area=45; addZone('seal'); S.sealZones[0].name='Patio'; S.sealZones[0].area=30; S.offers.bundle=true; S.offers.bookNow=true; calcAll();");
+ // price lock
+ run("S.client.date=fmtAUDate(new Date()); S.client.valid='01/01/2099';"); ok(/^Accept within 7 days \(by \d\d\/\d\d\/\d{4}\) to lock in this price\. After that, pricing may be reviewed until this quote expires on 01\/01\/2099\.$/.test(run("priceLockText()")),'PRICE LOCK shows the lock deadline');
+ run("S.client.date=fmtAUDate(new Date(Date.now()-9*86400000));"); ok(run("priceLockText()")==='This quote expires on 01/01/2099.','PRICE LOCK after 7 days shows just the expiry');
+ // 8. invoices with payment history
+ run("S.saveKey='PXT-1790000000001'; S.client.ref='PXT-2026-300'; LEDGER={key:S.saveKey,loaded:true,rows:[{invNo:'INV-2026-050',type:'Deposit',date:'01/12/2026',amount:494.8,paid:true},{invNo:'INV-2026-051',type:'Progress',date:'05/12/2026',amount:1000,paid:false,progressNo:1}]};");
+ await run("makeInvoice('final')"); var fi=run("window.__doc"); var tot=run("quoteMoney().incGst");
+ ok(fi.indexOf('Contract total inc GST')>-1 && fi.indexOf('Less deposit (INV-2026-050, 01/12/2026, paid)')>-1,'INVOICE lists the paid deposit with number and date');
+ ok(fi.indexOf('Less progress payment 1 (INV-2026-051, 05/12/2026, unpaid)')>-1 && fi.indexOf('OUTSTANDING')>-1,'INVOICE lists the unpaid progress invoice as outstanding');
+ ok(Math.abs(run("docCtx.amountDue")-r2(tot-494.8))<0.001,'INVOICE only paid invoices are deducted');
+ ok(fi.indexOf('Pay ')<0,'EARLY PAY not offered while two offers are already used');
+ run("S.offers.bookNow=false; calcAll();"); await run("makeInvoice('final', 0, '20/12/2026')"); var fe=run("window.__doc"); var tot2=run("quoteMoney().incGst");
+ var disc=r2(tot2*0.03);
+ ok(fe.indexOf('Pay '+fmtW(r2(tot2-494.8-disc))+' by 11:59pm on 20/12/2026 and save '+fmtW(disc)+'.')>-1,'EARLY PAY 3% of the contract on the final invoice');
+ ok(fe.indexOf('Early payment discount applies only if the full balance is received by 11:59pm on the completion date. After that the full balance applies.')>-1,'EARLY PAY terms printed');
+ ok(Math.abs(run("docCtx.earlyDiscount")-disc)<0.001,'EARLY PAY amount sent with the invoice');
+ await run("makeInvoice('progress', 500)"); ok(run("window.__doc").indexOf('Progress payment 2')>-1 && run("docCtx.progressNo")===2,'PROGRESS invoices number themselves per quote (2)');
+ run("LEDGER.rows=[{invNo:'INV-2026-050',type:'Deposit',amount:494.8,paid:true},{invNo:'INV-2026-052',type:'Final',amount:r2(quoteMoney().incGst-494.8),paid:true,onTime:true,earlyDiscount:100}];");
+ ok(Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).balanceBefore"))<0.001 && Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).discountsTaken")-100)<0.001 && Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).received")-r2(run("quoteMoney().incGst")-100))<0.001,'EARLY PAY ticked on time: discount recorded, balance cleared with $100 less received');
+ run("LEDGER.rows[1].onTime=false;"); ok(Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).discountsTaken"))<0.001 && Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).received")-r2(run("quoteMoney().incGst")))<0.001,'EARLY PAY not on time: no discount, the full amount is owed');
+ run("LEDGER.rows=[]; S.client.jobType='Domestic'; showTab('save');"); ok(!!run("document.getElementById('ledgerBox')") && run("document.getElementById('ledgerBox').innerHTML").indexOf('Balance owing')>-1,'LEDGER payment view on the Save step');
+ // variations
+ run("setAccepted(true); addOnsiteArea('seal'); var z=S.sealZones[S.sealZones.length-1]; z.area=20; calcAll();");
+ var vl=JSON.parse(run("JSON.stringify(variationList().map(function(v){return {vid:v.vid,ex:v.ex,d:v.discountEx,days:v.days,ap:v.approved};}))"));
+ ok(vl.length===1 && vl[0].vid==='V1' && Math.abs(vl[0].ex-400)<0.001 && Math.abs(vl[0].d+60)<0.001 && vl[0].days===1,'ONSITE area added after acceptance: variation V1, 15% off, +1 day');
+ var vbefore=run("quoteMoney().incGst"); ok(run("quoteMoney().sections.every(function(x){return x.key!=='seal-1';})"),'ONSITE added area stays out of the original contract');
+ run("openVariation('V1')"); ok(run("window.__doc").indexOf('VARIATION V1')>-1 && run("window.__doc").indexOf('Approved by client')>-1,'ONSITE variation PDF for client approval');
+ ok(Math.abs(run("invoiceCalc('final',{ledger:[]}).totalInc")-r2(vbefore))<0.001,'VARIATION not approved: contract total unchanged');
+ run("approveVariation('V1',true)"); ok(Math.abs(run("invoiceCalc('final',{ledger:[]}).totalInc")-r2(r2(vbefore)+374))<0.001,'VARIATION approved: adds $374 to the contract total');
+ ok(run("jobTrackFlags().extraDays")===1,'ONSITE extra day goes to Job Track');
+ // 6. close screen
+ run("S.sealZones.pop(); S.offers.bundle=false; S.offers.bookNow=false; S.accepted=null; S.client.date=fmtAUDate(new Date()); showTab('close');"); var cb=run("document.getElementById('closeBox').innerHTML");
+ ok(cb.indexOf('What we measured')>-1 && cb.indexOf('Garage')>-1 && cb.indexOf('Your price')>-1 && cb.indexOf('inc GST')>-1,'CLOSE shows what we measured and the price inc GST');
+ ok(cb.indexOf('Next available start dates')<0,'CLOSE hides start dates with no calendar connected');
+ ok(/Book today and save \$\d/.test(cb) && (cb.match(/close-offer/g)||[]).length===1,'CLOSE opens on the book today offer in dollars');
+ run("nextCloseOffer(); nextCloseOffer(); nextCloseOffer(); nextCloseOffer(); nextCloseOffer();"); var cb2=run("document.getElementById('closeBox').innerHTML");
+ ok((cb2.match(/close-offer/g)||[]).length===6 && cb2.indexOf('Next offer')<0,'CLOSE Next offer reveals bundle, price lock, Care Plan credit, priority and warranty');
+ ok(!/\d+% off<\/h3>/.test(cb2.replace('save 10% on it','')) ,'CLOSE every offer headline is a dollar amount');
+ run("toggleCloseOffer('bookNow'); toggleCloseOffer('careCredit'); toggleCloseOffer('bundle');"); ok(run("closeChosenDiscounts().length")===2,'CLOSE respects the two offer maximum');
+ run("window.__fo18=window.fetch; window.fetch=function(u,o){ if(o&&o.method==='POST'){ var b=JSON.parse(o.body); if(b.action==='nextQuoteRef') return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',number:301,ref:'PXT-2026-301'}));}}); if(b.action==='nextInvoice') return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',number:60,ref:'INV-2026-060'}));}}); return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',invoices:[]}));}}); } return Promise.resolve({json:function(){return Promise.resolve({status:'saved',quotes:[],jobs:[]});}}); };");
+ run("S.saveKey=''; S.client.ref='';"); await run("bookIt()");
+ ok(run("S.accepted && S.accepted.how")==='in person' && run("S.offers.bookNow")===true && run("S.offers.careCredit")===true && run("docCtx.kind")==='Invoice' && run("docCtx.invType")==='Deposit','CLOSE Book it applies the offers, records acceptance and opens the deposit invoice');
+ ok(run("window.__doc").indexOf('Care Plan sign up credit')>-1 && run("window.__doc").indexOf('Book today discount')>-1,'deposit invoice carries the chosen offers');
+ run("window.fetch=window.__fo18; closeDocOverlay(); confirmReset(false);");
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

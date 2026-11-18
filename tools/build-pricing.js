@@ -12,7 +12,8 @@ const ROOT = path.join(__dirname, '..');
 const ENTRY = ['freshState', 'applyRestoredPayload', 'zoneDefaults', 'ZONE_LISTS', 'buildSections', 'effSub', 'getAdjustment',
   'quoteSnapshot', 'quoteDocHtml', 'driveQuoteName', 'docFileName', 'priceTableSpec', 'priceGet', 'priceKey', 'applyPriceOverrides',
   'PRICE_DEFAULTS', 'applyAutoSite', 'estimateDays', 'setPath', 'getPath', 'stampQuoteDates', 'r2', 'ENTITIES', 'entityForKey',
-  'LOCATIONS', 'SERVICES', 'quoteServiceNames', 'spallingOptions', 'docJobLabel', 'fmt', 'cleanSnapText', 'CEM_WARRANTY_NOTE'];
+  'LOCATIONS', 'SERVICES', 'quoteServiceNames', 'spallingOptions', 'docJobLabel', 'fmt', 'cleanSnapText', 'CEM_WARRANTY_NOTE',
+  'quoteMoney', 'invoiceCalc', 'invoiceDocHtml', 'variationList', 'warrantyText', 'offersState'];
 
 function build() {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -60,11 +61,8 @@ function build() {
     '    applyRestoredPayload({ state: JSON.parse(JSON.stringify(input.state || {})), measureShapes: input.measureShapes || [] });\n' +
     '    if (input.saveKey) S.saveKey = input.saveKey;\n' +
     '    showPricingBreakdown = !!input.showPrices;\n' +
-    '    var sections = buildSections();\n' +
-    '    var base = 0; sections.forEach(function (x) { base += effSub(x); });\n' +
-    '    var custom = 0; S.custom.items.forEach(function (ci) { custom += (ci.price || 0); });\n' +
-    '    var adj = getAdjustment(base + custom);\n' +
-    '    var ex = base + custom + adj;\n' +
+    '    var money = quoteMoney();\n' +
+    '    var sections = money.sections, adj = money.adjustment, ex = money.totalEx;\n' +
     '    return {\n' +
     '      state: JSON.parse(JSON.stringify(S)), measureShapes: measureShapes,\n' +
     '      lines: sections.map(function (x) { return { key: x.key, category: cleanSnapText(x.category), zoneName: cleanSnapText(x.zoneName), desc: cleanSnapText(x.desc), amount: r2(effSub(x)), addons: x.addons.map(function (a) { return { label: cleanSnapText(a.label), price: r2(a.price) }; }) }; }),\n' +
@@ -75,11 +73,24 @@ function build() {
     '      days: S.custom.travelDays\n' +
     '    };\n' +
     '  }\n' +
+    '  // ---- server invoice: same document and payment history as the tool\n' +
+    '  function invoice(input) {\n' +
+    '    input = input || {};\n' +
+    '    applyPriceOverrides(input.prices || {});\n' +
+    '    applyRestoredPayload({ state: JSON.parse(JSON.stringify(input.state || {})), measureShapes: input.measureShapes || [] });\n' +
+    '    if (input.saveKey) S.saveKey = input.saveKey;\n' +
+    '    var opts = { ledger: input.ledger || [], amount: input.amount, invNo: input.invNo, date: new Date(input.date || Date.now()), completion: input.completion, notes: input.notes };\n' +
+    '    var doc = invoiceDocHtml(input.stage || \'deposit\', input.invNo || \'\', opts);\n' +
+    '    var k = doc.calc;\n' +
+    '    return { html: doc.html, title: doc.title, type: doc.type, amount: k.amount, gst: k.gst, totalInc: k.totalInc, contractInc: k.contractInc,\n' +
+    '             paidToDate: k.paidToDate, balanceBefore: k.balanceBefore, balanceAfter: k.balanceAfter, progressNo: k.progressNo,\n' +
+    '             earlyDiscount: k.early ? k.early.discount : 0, deposit: k.money.deposit };\n' +
+    '  }\n' +
     '  function priceTable() {\n' +
     '    applyPriceOverrides({});\n' +
     '    return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });\n' +
     '  }\n' +
-    '  return { version: \'' + hash + '\', run: run, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,\n' +
+    '  return { version: \'' + hash + '\', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,\n' +
     '           setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };\n' +
     '})();\n';
 }

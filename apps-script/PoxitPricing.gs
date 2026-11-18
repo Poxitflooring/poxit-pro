@@ -2,7 +2,7 @@
 //  POXIT PRICING  (file: PoxitPricing.gs)
 //  GENERATED from the quote tool (index.html) by tools/build-pricing.js.
 //  Do not edit by hand: paste the new version whenever the tool's pricing changes.
-//  Pricing version: ce7b072e064b
+//  Pricing version: e7035c58dc93
 // =====================================================================
 var PXP = (function () {
   // No screen on the server: anything that would touch it is never called here
@@ -47,6 +47,16 @@ const PRICE = {
   },
   travelFreeKm: 25, travelRate: 1.75,
   gs: { 'Premium Grind & Seal':85, 'Elite Grind & Seal':90 },
+  // Pressure washing, Standard (chlorine) tier: the whole area drops to this rate once a job is over the threshold
+  pwBulk: { over:100, rate:6 },
+  // Offers, upgrades and deposits (all editable in the Price Table)
+  offers: { warrantyStdYears:1, warrantyExtYears:5, warrantyPct:10, warrantyCap:0,
+            priorityPct:5, priorityMin:250, priorityMax:1500, priorityDays:7,
+            bundlePct:10, onsitePct:15, bookNowPct:2, priceLockDays:7, maxOffers:2,
+            earlyPct:3, earlyMin:3000, depositCommercialPct:50,
+            domTier1Max:3300, domTier1Pct:20, domTier2Max:19999, domTier2Pct:10, domTier3Pct:5 },
+  // Basic Care Plan price by floor size (the Care Plan sign up credit)
+  careBasic: [ {max:30, price:89}, {max:60, price:129}, {max:100, price:169}, {max:150, price:189}, {max:200, price:219} ],
   // Matte topcoat for epoxy: matting agent added to the Armourthane topcoat, priced per m² from the kit cost
   matte: { kitCost:0, kitM2:100, markup:2 },
   gsMin: { 'Premium Grind & Seal':450, 'Elite Grind & Seal':450 },
@@ -80,7 +90,7 @@ const PRICE = {
     double: { '2':850, '3':1000, '4':1150, '5':1350 }
   },
   rampMortarBucketKg: 10, rampMortarBucketCost: 48.74, rampCoverage: 1.4,
-  rampEpoxyBatchKg: 22.2, rampEpoxyBatchCost: 55, rampEpoxyCoverage: 1.8, rampEpoxyMultiplier: 2.2,
+  rampEpoxyBatchKg: 22.2, rampEpoxyBatchCost: 55, rampEpoxyCoverage: 1.8, rampEpoxyMultiplier: 3, rampMin: 250,
   coreDrill: { '25mm (Weep Hole)': 220, 'Up to 75mm': 250, 'Up to 102mm': 300, 'Up to 152mm': 380 },
   coreDrillPvc: 45, coreDrillSilicone: 25,
   care: { 'Level 2 Refresh Coat': {rate:20,min:500}, 'Level 3 Full Rejuvenation': {rate:32,min:900}, 'Level 3 + Reflake': {rate:44,min:900} },
@@ -153,12 +163,27 @@ function priceTableSpec() {
     { path:['spallCem','small'], label:'Spalling cementitious, small', unit:'$ ea' }, { path:['spallCem','med'], label:'Spalling cementitious, medium', unit:'$ ea' },
     { path:['spallCem','large'], label:'Spalling cementitious, large', unit:'$ ea' }, { path:['skim'], label:'Skim coat', unit:'$/m²' },
     { path:['skimMin'], label:'Skim coat minimum', unit:'$' }, { path:['cancer','rate'], label:'Concrete cancer', unit:'$/m²' },
-    { path:['cancer','min'], label:'Concrete cancer minimum', unit:'$' }, { path:['cancer','rebar'], label:'New rebar', unit:'$/lm' } ] });
+    { path:['cancer','min'], label:'Concrete cancer minimum', unit:'$' }, { path:['cancer','rebar'], label:'New rebar', unit:'$/lm' },
+    { path:['rampEpoxyMultiplier'], label:'Ramping epoxy + sand: labour multiplier on batch cost', unit:'×' },
+    { path:['rampEpoxyBatchCost'], label:'Ramping epoxy + sand: material cost per batch', unit:'$' }, { path:['rampMin'], label:'Ramping minimum per ramp', unit:'$' } ] });
+  const O = function(k, label, unit){ return { path:['offers',k], label:label, unit:unit }; };
+  g.push({ title:'Upgrades (paid)', rows: [ O('warrantyStdYears','Standard workmanship warranty','yrs'), O('warrantyExtYears','Extended workmanship warranty','yrs'),
+    O('warrantyPct','Warranty extension, % of job ex GST','%'), O('warrantyCap','Warranty extension cap (0 = no cap)','$'),
+    O('priorityPct','Priority booking, % of job ex GST','%'), O('priorityMin','Priority booking minimum','$'), O('priorityMax','Priority booking maximum','$'),
+    O('priorityDays','Priority start within','days') ] });
+  g.push({ title:'Discounts & credits', note:'At most this many discounts or credits per job (paid upgrades never count).', rows: [ O('maxOffers','Offer limit per job','#'),
+    O('bundlePct','Bundle discount on each area after the first','%'), O('onsitePct','On site add-on discount','%'), O('bookNowPct','Book today, % of total inc GST','%'),
+    O('priceLockDays','Price lock (0 = off)','days'), O('earlyPct','Early payment discount, % of contract inc GST','%'), O('earlyMin','Early payment only on contracts from','$') ]
+    .concat((PRICE.careBasic || []).map(function(t, i){ return { path:['careBasic', i, 'price'], label:'Care Plan credit (Basic price) up to ' + t.max + 'm²', unit:'$' }; })) });
+  g.push({ title:'Deposits', note:'Domestic deposits follow the QBCC limits by contract price inc GST.', rows: [ O('depositCommercialPct','Commercial deposit','%'),
+    O('domTier1Max','Domestic tier 1: contracts up to','$'), O('domTier1Pct','Domestic tier 1 maximum deposit','%'),
+    O('domTier2Max','Domestic tier 2: contracts up to','$'), O('domTier2Pct','Domestic tier 2 maximum deposit','%'), O('domTier3Pct','Domestic above tier 2 maximum deposit','%') ] });
   g.push({ title:'Joints & cuts', rows: [
     { path:['joint'], label:'Control joint', unit:'$/lm' }, { path:['routing'], label:'Routing', unit:'$/lm' }, { path:['softcut'], label:'Soft cut', unit:'$/lm' },
     { path:['silJoint'], label:'Silicone joint filling', unit:'$/lm' }, { path:['polyJoint'], label:'Polyurethane joint filling', unit:'$/lm' } ] });
   g.push({ title:'Pressure washing', rows: Object.keys(PRICE.pw).map(function(k){ return { path:['pw',k], label:k, unit:'$/m²' }; })
-    .concat([{ path:['pwMin'], label:'Wash minimum', unit:'$' }, { path:['pwAqua'], label:'AquaSeal after wash', unit:'$/m²' }]) });
+    .concat([{ path:['pwBulk','over'], label:'Standard tier: bulk rate applies over', unit:'m²' }, { path:['pwBulk','rate'], label:'Standard tier bulk rate (whole area)', unit:'$/m²' },
+             { path:['pwMin'], label:'Wash minimum', unit:'$' }, { path:['pwAqua'], label:'AquaSeal after wash', unit:'$/m²' }]) });
   g.push({ title:'Site & travel', rows: [
     { path:['travelFreeKm'], label:'Free travel zone', unit:'km' }, { path:['travelRate'], label:'Travel rate', unit:'$/km' },
     { path:['waste','Light'], label:'Waste, light grind', unit:'$/m²' }, { path:['waste','Medium'], label:'Waste, medium grind', unit:'$/m²' },
@@ -194,7 +219,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', jobType:'Domestic', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     docService: '',
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
@@ -224,7 +249,9 @@ function freshState() {
     overrides: {},
     // Site step: what is filled in automatically (any manual change switches that one off)
     auto: { days:true, travel:true, waste:true },
-    travel: { mode:'suburb', place:'', km:0 }
+    travel: { mode:'suburb', place:'', km:0 },
+    offers: freshOffers(),
+    accepted: null
   };
 }
 let S = freshState();
@@ -238,6 +265,17 @@ function setPath(obj, path, value) {
 }
 function getPath(obj, path) {
   return path.split('.').reduce(function(o,k){ return (o !== undefined && o !== null) ? o[k] : undefined; }, obj);
+}
+function subOfKey(key) {
+  const k = String(key || '');
+  if (/^(travel|waste|wasteRun)$/.test(k)) return 'site';
+  if (/^comm-/.test(k)) return 'comm';
+  if (/^(pw|pwPlan|pwUpsell|roofWash)/.test(k)) return 'pw';
+  if (/^lm/.test(k)) return 'lm';
+  if (/^demo/.test(k)) return 'demo';
+  if (/^(joints|softcuts|silJoints|polyJoints|coreDrill)/.test(k)) return 'joints';
+  if (/^(cracks|spall|skim|cancer|ramp)/.test(k)) return 'repairs';
+  return 'floors';
 }
 const SEAL_TIERS = ['Same-Day Sealer','Premium Next-Day Sealer'];
 function finishText(z) { return z && z.finish ? ' · ' + z.finish + ' finish' : ''; }
@@ -333,8 +371,9 @@ function calcRamp(r) {
   const kgNeeded = PRICE.rampEpoxyCoverage * avgThicknessMm * footprintM2;
   const batches = kgNeeded > 0 ? Math.ceil(kgNeeded / PRICE.rampEpoxyBatchKg) : 0;
   const materialsCost = batches * PRICE.rampEpoxyBatchCost;
-  const cost = materialsCost * PRICE.rampEpoxyMultiplier;
-  return { material:material, lengthM:lengthM, footprintM2:footprintM2, kgNeeded:kgNeeded, batches:batches, materialsCost:materialsCost, cost:cost };
+  const byBatch = materialsCost * PRICE.rampEpoxyMultiplier;
+  const cost = batches > 0 ? Math.max(byBatch, PRICE.rampMin) : 0;
+  return { minApplied: batches > 0 && byBatch < PRICE.rampMin, material:material, lengthM:lengthM, footprintM2:footprintM2, kgNeeded:kgNeeded, batches:batches, materialsCost:materialsCost, cost:cost };
 }
 function cancerPatchArea(p) { return ((p.lengthMm||0) * (p.widthMm||0) * (p.qty||1)) / 1e6; }
 function cancerCalc() {
@@ -359,14 +398,20 @@ function cancerSection() {
   return { key:'cancer', category:'🔧 Concrete Cancer Repair', zoneName:'', desc:'Chop out affected concrete, clean rebar, epoxy rust-inhibiting primer, patch · ' + c.area.toFixed(3) + 'm² total', addons:add, subtotal:c.total };
 }
 function pwTier() { return S.pwJob.oil ? 'Heavy' : S.pwJob.tier; }
+function pwRateFor(tier, area) {
+  const b = PRICE.pwBulk || {};
+  if (tier === 'Standard' && b.over > 0 && area > b.over && b.rate > 0) return b.rate;
+  return PRICE.pw[tier] || PRICE.pw['Standard'];
+}
 function pwCalc() {
   let area = 0;
   S.pwZones.forEach(function(z){ area += (z.area||0); });
   const tier = pwTier();
-  const byArea = area * PRICE.pw[tier];
+  const rate = pwRateFor(tier, area);
+  const byArea = area * rate;
   const wash = area > 0 ? Math.max(byArea, PRICE.pwMin) : 0;
   const aqua = (S.pwJob.aqua && area > 0) ? area * PRICE.pwAqua : 0;
-  return { area:area, tier:tier, byArea:byArea, wash:wash, minApplied: area > 0 && byArea < PRICE.pwMin, aqua:aqua, total:wash + aqua };
+  return { area:area, tier:tier, rate:rate, byArea:byArea, wash:wash, minApplied: area > 0 && byArea < PRICE.pwMin, aqua:aqua, total:wash + aqua };
 }
 function pwSection() {
   const c = pwCalc();
@@ -374,7 +419,7 @@ function pwSection() {
   const add = [];
   S.pwZones.forEach(function(z,i) {
     if (!(z.area > 0)) return;
-    add.push({ label:(z.name||'Area '+(i+1)) + ' — ' + z.area + 'm² @ $' + PRICE.pw[c.tier] + '/m²', price:z.area*PRICE.pw[c.tier] });
+    add.push({ label:(z.name||'Area '+(i+1)) + ' — ' + z.area + 'm² @ $' + c.rate + '/m²' + (c.rate !== PRICE.pw[c.tier] ? ' (over ' + PRICE.pwBulk.over + 'm² rate)' : ''), price:z.area*c.rate });
   });
   if (c.minApplied) add.push({ label:'Minimum callout top-up ($' + PRICE.pwMin + ' min)', price:c.wash - c.byArea });
   if (c.aqua > 0) add.push({ label:'AquaSeal after wash — ' + c.area + 'm² @ $' + PRICE.pwAqua + '/m²', price:c.aqua });
@@ -384,7 +429,7 @@ function r2(n) { return Math.round(n * 100) / 100; }
 function pwPlanCalc() {
   const p = S.pwPlan || freshState().pwPlan;
   const f = PRICE.pwPlan[p.freq] || PRICE.pwPlan['Six Monthly'];
-  const rate = PRICE.pw[p.tier] || PRICE.pw['Standard'];
+  const rate = PRICE.pw[p.tier] || PRICE.pw['Standard'];  // plan visits keep the per-visit tier rate (no over 100m² rate)
   const area = parseFloat(p.area) || 0;
   const full = area * rate;
   const byArea = full * (1 - f.disc);
@@ -449,8 +494,8 @@ function lmSection() {
 }
 function jobGrindArea() {
   let a = 0;
-  ['epoxyZones','gsZones','grindZones','polishedZones'].forEach(function(l){ S[l].forEach(function(z){ a += (z.area||0); }); });
-  S.tintedZones.forEach(function(z){ if (z.prep === 'Grind Prep') a += (z.area||0); });
+  ['epoxyZones','gsZones','grindZones','polishedZones'].forEach(function(l){ S[l].forEach(function(z){ if (!isOnsiteZone(z)) a += (z.area||0); }); });
+  S.tintedZones.forEach(function(z){ if (z.prep === 'Grind Prep' && !isOnsiteZone(z)) a += (z.area||0); });
   (S.commAreas || []).forEach(function(c){ a += commNum(c.floor) * commQty(c); });
   return Math.round(a*100)/100;
 }
@@ -469,7 +514,7 @@ function daysFor(rule, m2) {
 }
 function sumArea(list, filter) {
   let t = 0;
-  (S[list] || []).forEach(function(z){ if (!filter || filter(z)) t += (parseFloat(z.area) || 0) + wallM2(z); });
+  (S[list] || []).forEach(function(z){ if (!isOnsiteZone(z) && (!filter || filter(z))) t += (parseFloat(z.area) || 0) + wallM2(z); });
   return Math.round(t*100)/100;
 }
 function estimateDays() {
@@ -582,7 +627,14 @@ function epoxyAddonsList(z) {
   const ma = matteAddon(z); if (ma) list.push(ma);
   return list;
 }
-function buildSections() { return applyLineEdits(buildSectionsRaw()); }
+function buildSections() {
+  const onsite = {}; onsiteZones().forEach(function(o){ onsite[o.key] = 1; });
+  const yrs = warrantyYears();
+  return applyLineEdits(buildSectionsRaw()).filter(function(x){ return !onsite[x.key]; }).map(function(x) {
+    if (WARRANTY_KEY_RE.test(x.key)) x.warranty = 'Workmanship warranty: ' + yrs + ' year' + (yrs > 1 ? 's' : '');
+    return x;
+  });
+}
 function buildSectionsRaw() {
   applyAutoSite();
   const sections = [];
@@ -1118,22 +1170,22 @@ function scopeRowsHTML(sections, withPrices) {
     return '<tr class="zone-row"><td><span class="zone-cat">' + sec.category + '</span>' +
       (sec.zoneName ? '<span class="zone-name"> — ' + sec.zoneName + '</span>' : '') +
       (sec.desc ? '<br><span class="zone-desc">' + String(sec.desc).replace(/\n/g, '<br>') + '</span>' : '') +
-      (sec.qtyText ? '<br><span class="zone-desc">' + sec.qtyText + '</span>' : '') + '</td>' +
+      (sec.qtyText ? '<br><span class="zone-desc">' + sec.qtyText + '</span>' : '') +
+      (sec.warranty ? '<br><span class="zone-desc" style="font-style:normal;color:#0a8f8a;">' + sec.warranty + '</span>' : '') + '</td>' +
       '<td class="price-col zone-price">' + fmt(effSub(sec)) + '</td></tr>' + addonRows;
   }).join('<tr class="spacer-row"><td colspan="2"></td></tr>');
 }
 function quoteDocHtml() {
   const c = S.client;
   const client = (c.first + ' ' + c.last).trim() || '—';
-  const sections = buildSections();
-  let base = 0; sections.forEach(function(s){ base += effSub(s); });
-  let customItems = 0; S.custom.items.forEach(function(ci){ customItems += (ci.price||0); });
-  const adjustment = getAdjustment(base + customItems);
-  const total = base + customItems + adjustment;
+  const money = quoteMoney();
+  const sections = money.sections, adjustment = money.adjustment;
+  const total = money.totalEx;
   const gst = total*0.1, incGst = total+gst;
   let rows = scopeRowsHTML(sections, showPricingBreakdown);
   rows += customRowsHTML();
   if (adjustment !== 0) rows += '<tr class="zone-row"><td><span class="zone-cat">' + (adjustment<0?'Discount':'Markup') + '</span></td><td class="price-col zone-price">' + (adjustment<0?'-':'+') + fmt(Math.abs(adjustment)) + '</td></tr>';
+  rows += offerRowsHTML(money);
   const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
     '<title>' + docFileName('Quote', c.ref) + '</title><style>' + docCSS() + '</style></head><body>' +
     docHeader('QUOTE / SCOPE OF WORKS') +
@@ -1156,15 +1208,301 @@ function quoteDocHtml() {
     commComparisonDocHTML() +
     spallingOptionsDocHTML() +
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Payment Terms</span></div>' +
-    '<p style="font-size:11.5px;line-height:1.7;color:#333;">All quotes are valid for <strong>30 days</strong> from the date of issue. A <strong>50% non-refundable deposit</strong> is required to confirm booking and reserve the job date. Remaining 50% is due on <strong>completion of work before Poxit leaves the site</strong>.</p>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;">' + paymentTermsHTML(money) + '</p>' +
     (cementitiousOnQuote() ? cemWarrantyHTML() : '') +
+    upgradesDocHTML(money) +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showQuote) +
-    (c.clientNotes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
+    (c.clientNotes ? '<div class="section-heading"><span class="section-num">5.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
     (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
     commSpecDocHTML() +
     '</div>' + docFooter() +
     '<scr' + 'ipt>window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
   return html;
+}
+function freshOffers() {
+  return { warranty:'standard', priority:false, bundle:false, careCredit:false, bookNow:false, carePlan:'Basic' };
+}
+function offersState() {
+  if (!S.offers || typeof S.offers !== 'object') S.offers = freshOffers();
+  const f = freshOffers();
+  Object.keys(f).forEach(function(k){ if (S.offers[k] === undefined) S.offers[k] = f[k]; });
+  return S.offers;
+}
+const ONSITE_LISTS = ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','grindZones','aquaZones'];
+const ONSITE_TYPES = { epoxyZones:'epoxy', tintedZones:'tinted', sealZones:'seal', gsZones:'gs', polishedZones:'polished', grindZones:'grind', aquaZones:'aqua' };
+function isOnsiteZone(z) { return !!(z && z.onsite && z.onsite.vid); }
+function onsiteZones() {
+  const out = [];
+  ONSITE_LISTS.forEach(function(l){ (S[l] || []).forEach(function(z, i){ if (isOnsiteZone(z)) out.push({ list:l, i:i, z:z, key:ONSITE_TYPES[l] + '-' + i }); }); });
+  return out;
+}
+function requestedDiscounts() {
+  const o = offersState(), a = [];
+  if (o.bundle) a.push('bundle');
+  if (o.careCredit) a.push('careCredit');
+  if (o.bookNow) a.push('bookNow');
+  if (onsiteZones().length) a.push('onsite');
+  return a;
+}
+function activeDiscounts() { return requestedDiscounts().slice(0, Math.max(0, PRICE.offers.maxOffers)); }
+function discountApplies(k) { return activeDiscounts().indexOf(k) > -1; }
+function canAddDiscount(k) { const a = activeDiscounts(); return a.indexOf(k) > -1 || a.length < PRICE.offers.maxOffers; }
+function warrantyPrice(jobEx) {
+  const P = PRICE.offers, cap = parseFloat(P.warrantyCap) || 0;
+  let v = jobEx * P.warrantyPct / 100;
+  if (cap > 0) v = Math.min(v, cap);
+  return r2(Math.max(0, v));
+}
+function priorityPrice(jobEx) {
+  const P = PRICE.offers;
+  return r2(Math.min(P.priorityMax, Math.max(P.priorityMin, jobEx * P.priorityPct / 100)));
+}
+function warrantyYears() {
+  const w = offersState().warranty;
+  return (w === 'extended' || w === 'careplan') ? PRICE.offers.warrantyExtYears : PRICE.offers.warrantyStdYears;
+}
+function warrantyText() {
+  const w = offersState().warranty, y = warrantyYears();
+  if (w === 'careplan') return y + ' year workmanship warranty, included with your top Care Plan (includes a maintenance topcoat)';
+  if (w === 'extended') return y + ' year workmanship warranty (extended)';
+  return y + ' year workmanship warranty';
+}
+function coatingFloorM2() {
+  let t = 0;
+  ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','aquaZones'].forEach(function(l) {
+    (S[l] || []).forEach(function(z){ if (!isOnsiteZone(z)) t += parseFloat(z.area) || 0; });
+  });
+  (S.commAreas || []).forEach(function(c){ t += commNum(c.floor) * commQty(c); });
+  return Math.round(t * 100) / 100;
+}
+function careBasicPrice(m2) {
+  const tiers = PRICE.careBasic || [];
+  if (!tiers.length) return 0;
+  for (let i = 0; i < tiers.length; i++) if (m2 <= tiers[i].max) return tiers[i].price;
+  return tiers[tiers.length - 1].price;
+}
+function careCreditAmount() { return careBasicPrice(coatingFloorM2()); }
+const WARRANTY_KEY_RE = /^(epoxy|tinted|seal|gs|aqua|polished|care|shine|comm)-\d+$/;
+function lineName(sec) { return String(sec.zoneName || sec.category || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/^[^A-Za-z0-9]+/, '').trim(); }
+function bundleLines(sections) {
+  const elig = sections.filter(function(x){ return subOfKey(x.key) !== 'site' && x.key !== 'coatingMin' && effSub(x) > 0; });
+  return elig.slice(1).map(function(x) {
+    return { key:'bundle-' + x.key, kind:'discount', offer:'bundle', label:'Bundle discount: ' + PRICE.offers.bundlePct + '% off ' + lineName(x), ex: -r2(effSub(x) * PRICE.offers.bundlePct / 100) };
+  });
+}
+function bookNowInc(runningEx) { return Math.round(Math.max(0, runningEx) * 1.1 * PRICE.offers.bookNowPct / 100); }
+function quoteMoney() {
+  const sections = buildSections();
+  let base = 0; sections.forEach(function(s){ base += effSub(s); });
+  let customItems = 0; S.custom.items.forEach(function(ci){ customItems += (ci.price || 0); });
+  const adjustment = getAdjustment(base + customItems);
+  const jobEx = base + customItems + adjustment;
+  const o = offersState(), P = PRICE.offers;
+  const extras = [];
+  if (o.warranty === 'extended') extras.push({ key:'warranty', kind:'upgrade', label:P.warrantyExtYears + ' year workmanship warranty (extended from ' + P.warrantyStdYears + ' year)', ex: warrantyPrice(jobEx) });
+  if (o.priority) extras.push({ key:'priority', kind:'upgrade', label:'Priority booking: start within ' + P.priorityDays + ' days of deposit', ex: priorityPrice(jobEx) });
+  if (discountApplies('bundle')) bundleLines(sections).forEach(function(b){ extras.push(b); });
+  if (discountApplies('careCredit')) {
+    const cc = careCreditAmount();
+    if (cc > 0) extras.push({ key:'careCredit', kind:'discount', offer:'careCredit', label:'Care Plan sign up credit', ex: -cc });
+  }
+  if (discountApplies('bookNow')) {
+    let run = jobEx; extras.forEach(function(x){ run += x.ex; });
+    const inc = bookNowInc(run);
+    if (inc > 0) extras.push({ key:'bookNow', kind:'discount', offer:'bookNow', label:'Book today discount', ex: -inc / 1.1, inc: -inc });
+  }
+  let totalEx = jobEx; extras.forEach(function(x){ totalEx += x.ex; });
+  const incGst = totalEx * 1.1;
+  return { sections:sections, base:base, customItems:customItems, adjustment:adjustment, jobEx:jobEx, extras:extras,
+           totalEx:totalEx, gst:totalEx * 0.1, incGst:incGst, deposit:depositInfo(incGst), discounts:activeDiscounts() };
+}
+function isDomestic() { return (S.client && S.client.jobType) !== 'Commercial'; }
+function depositPct(contractInc) {
+  const P = PRICE.offers;
+  if (!isDomestic()) return P.depositCommercialPct;
+  if (contractInc <= P.domTier1Max) return P.domTier1Pct;
+  if (contractInc <= P.domTier2Max) return P.domTier2Pct;
+  return P.domTier3Pct;
+}
+function depositInfo(contractInc) {
+  const pct = depositPct(contractInc);
+  return { pct: pct, amount: r2(contractInc * pct / 100), domestic: isDomestic() };
+}
+function paymentTermsHTML(m) {
+  const d = m.deposit;
+  const dep = '<strong>' + d.pct + '% deposit (' + fmt(d.amount) + ')</strong>';
+  return 'All quotes are valid for <strong>30 days</strong> from the date of issue. A ' + dep + ' is required to confirm booking and reserve the job date' +
+    (d.domestic ? ', in line with QBCC deposit limits for domestic building work' : ', non-refundable') +
+    '. The balance' + (d.domestic ? '' : ' (' + (100 - d.pct) + '%)') + ' is due on <strong>completion of work before Poxit leaves the site</strong>' +
+    (d.domestic ? ', less any progress payments made' : '') + '.';
+}
+function parseAUDate(s) {
+  const m = String(s || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)) : null;
+}
+function fmtAUDate(d) { return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear(); }
+function priceLockInfo(now) {
+  const days = parseInt(PRICE.offers.priceLockDays, 10) || 0;
+  const qd = parseAUDate(S.client.date);
+  if (!days || !qd) return null;
+  const lock = new Date(qd.getFullYear(), qd.getMonth(), qd.getDate() + days);
+  const today = now || new Date();
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return { days: days, lockDate: fmtAUDate(lock), expiry: S.client.valid || '', locked: t0 <= lock };
+}
+function priceLockText(now) {
+  const p = priceLockInfo(now);
+  if (!p) return S.client.valid ? 'This quote expires on ' + S.client.valid + '.' : '';
+  if (!p.locked) return 'This quote expires on ' + p.expiry + '.';
+  return 'Accept within ' + p.days + ' days (by ' + p.lockDate + ') to lock in this price. After that, pricing may be reviewed until this quote expires on ' + p.expiry + '.';
+}
+function bookingText() {
+  return offersState().priority ? 'Priority start: within ' + PRICE.offers.priorityDays + ' days of deposit.' : 'Start date confirmed on deposit.';
+}
+function offerRowsHTML(m) {
+  return m.extras.map(function(x) {
+    return '<tr class="zone-row"><td><span class="zone-cat">' + x.label + '</span></td><td class="price-col zone-price">' + (x.ex < 0 ? '-' : '+') + fmt(Math.abs(x.inc !== undefined ? x.inc / 1.1 : x.ex)) + '</td></tr>';
+  }).join('');
+}
+function upgradesDocHTML(m) {
+  const o = offersState(), P = PRICE.offers;
+  const box = function(on){ return '<span style="display:inline-block;width:12px;height:12px;border:1.5px solid ' + (on ? '#0ABAB5' : '#111') + ';background:' + (on ? '#0ABAB5' : 'transparent') + ';color:#fff;margin-right:8px;text-align:center;line-height:12px;font-size:9px;font-weight:700;vertical-align:-2px;">' + (on ? 'X' : '') + '</span>'; };
+  const row = function(on, text, price) {
+    return '<tr><td style="padding:6px 0;font-size:11.5px;color:#333;">' + box(on) + text + '</td><td class="price-col" style="font-size:11.5px;white-space:nowrap;">' + (price || '') + '</td></tr>';
+  };
+  return '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Warranty &amp; Booking</span></div>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-bottom:6px;">Every system on this quote includes a <strong>' + P.warrantyStdYears + ' year workmanship warranty</strong>. Your warranty: <strong>' + warrantyText() + '</strong>.</p>' +
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">' +
+    row(o.warranty === 'extended', 'Extend to ' + P.warrantyExtYears + ' year workmanship warranty', '+' + fmt(warrantyPrice(m.jobEx)) + ' ex GST') +
+    row(o.warranty === 'careplan', 'Or get the ' + P.warrantyExtYears + ' year warranty included with our top Care Plan (includes a maintenance topcoat)', '') +
+    row(!!o.priority, 'Priority Booking: lock in the next available start date ahead of our standard booking queue.', '+' + fmt(priorityPrice(m.jobEx)) + ' ex GST') +
+    '</table>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;"><strong>' + bookingText() + '</strong>' + (priceLockText() ? ' ' + priceLockText() : '') + '</p>' +
+    (S.accepted && S.accepted.date ? '<p style="font-size:11.5px;color:#333;"><strong>Accepted ' + S.accepted.date + '</strong> (' + (S.accepted.how || 'in person') + '). Warranty: ' + (S.accepted.warranty || warrantyText()) + '.</p>' : '');
+}
+function variationList() {
+  const raw = applyLineEdits(buildSectionsRaw());
+  const byKey = {}; raw.forEach(function(x){ byKey[x.key] = x; });
+  const groups = {};
+  onsiteZones().forEach(function(o) {
+    const sec = byKey[o.key];
+    if (!sec) return;
+    const v = o.z.onsite;
+    const g = groups[v.vid] || (groups[v.vid] = { vid: v.vid, approved: !!v.approved, date: v.date || '', days: 0, sections: [], ex: 0, discountEx: 0 });
+    g.sections.push(sec);
+    g.days += parseFloat(v.days) || 0;
+    g.ex += effSub(sec);
+    g.approved = g.approved && !!v.approved;
+  });
+  const allow = discountApplies('onsite');
+  return Object.keys(groups).sort().map(function(k) {
+    const g = groups[k];
+    g.discountEx = allow ? -r2(g.ex * PRICE.offers.onsitePct / 100) : 0;
+    g.totalEx = g.ex + g.discountEx;
+    g.inc = r2(g.totalEx * 1.1);
+    return g;
+  });
+}
+function approvedVariationsInc() { return r2(variationList().filter(function(v){ return v.approved; }).reduce(function(t, v){ return t + v.inc; }, 0)); }
+const BILL_TYPES = { 'Deposit':1, 'Progress':1, 'Final':1, 'Full Payment':1 };
+function invoiceCalc(stage, opts) {
+  opts = opts || {};
+  const m = quoteMoney();
+  const contractInc = r2(m.incGst);
+  const varInc = approvedVariationsInc();
+  const totalInc = r2(contractInc + varInc);
+  const ledger = (opts.ledger || []).filter(function(r){ return BILL_TYPES[r.type] && r.invNo !== opts.invNo; });
+  let pn = 0;
+  const history = ledger.map(function(r) {
+    const progressNo = r.type === 'Progress' ? (r.progressNo || ++pn) : 0;
+    if (r.type === 'Progress' && r.progressNo) pn = Math.max(pn, r.progressNo);
+    const early = r.type === 'Final' && r.paid && r.onTime ? r2(parseFloat(r.earlyDiscount) || 0) : 0;
+    const amt = r2(parseFloat(r.amount) || 0);
+    return { invNo: r.invNo, type: r.type, date: r.date || '', amount: amt, received: r2(amt - early), paid: !!r.paid, early: early,
+             label: r.type === 'Deposit' ? 'Less deposit' : r.type === 'Progress' ? 'Less progress payment ' + progressNo : r.type === 'Final' ? 'Less final payment' : 'Less payment' };
+  });
+  // a paid invoice clears its whole amount; paid on time means part of it was the early payment discount
+  const paidToDate = r2(history.filter(function(h){ return h.paid; }).reduce(function(t, h){ return t + h.amount; }, 0));
+  const discountsTaken = r2(history.reduce(function(t, h){ return t + h.early; }, 0));
+  const balanceBefore = r2(totalInc - paidToDate);
+  let amount = 0, progressNo = 0;
+  if (stage === 'deposit') amount = m.deposit.amount;
+  else if (stage === 'progress') { amount = r2(Math.min(parseFloat(opts.amount) || 0, balanceBefore)); progressNo = pn + 1; }
+  else if (stage === 'final' || stage === 'full') amount = Math.max(0, balanceBefore);
+  amount = r2(amount);
+  let early = null;
+  if (stage === 'final' && totalInc >= PRICE.offers.earlyMin && amount > 0 && canAddDiscount('earlyPay')) {
+    const disc = r2(totalInc * PRICE.offers.earlyPct / 100);
+    early = { discount: Math.min(disc, amount), payBy: r2(amount - Math.min(disc, amount)), date: opts.completion || fmtAUDate(opts.date || new Date()) };
+  }
+  return { money: m, contractInc: contractInc, variationsInc: varInc, totalInc: totalInc, history: history, paidToDate: paidToDate, discountsTaken: discountsTaken, received: r2(paidToDate - discountsTaken),
+           balanceBefore: balanceBefore, amount: amount, gst: r2(amount / 11), balanceAfter: r2(balanceBefore - amount),
+           progressNo: progressNo, early: early, unpaid: history.filter(function(h){ return !h.paid; }) };
+}
+const INVOICE_TITLES = { deposit:'Deposit Invoice', progress:'Progress Invoice', final:'Final Invoice', full:'Full Payment Invoice', paid:'Paid Invoice' };
+const INVOICE_TYPES = { deposit:'Deposit', progress:'Progress', final:'Final', full:'Full Payment', paid:'Paid' };
+function invoiceDocHtml(stage, invNo, opts) {
+  opts = opts || {};
+  const k = invoiceCalc(stage, opts);
+  const m = k.money, c = S.client;
+  const client = (c.first + ' ' + c.last).trim() || '—';
+  const date = opts.date || new Date();
+  const due = new Date(date.getTime() + 7 * 86400000);
+  const title = docFileName(INVOICE_TITLES[stage] + (stage === 'progress' && k.progressNo ? ' ' + k.progressNo : ''), invNo);
+  let rows = scopeRowsHTML(m.sections, false) + customRowsHTML();
+  if (m.adjustment !== 0) rows += '<tr class="zone-row"><td><span class="zone-cat">' + (m.adjustment < 0 ? 'Discount' : 'Markup') + '</span></td><td class="price-col zone-price">' + (m.adjustment < 0 ? '-' : '+') + fmt(Math.abs(m.adjustment)) + '</td></tr>';
+  rows += offerRowsHTML(m);
+  const vars = variationList().filter(function(v){ return v.approved; });
+  vars.forEach(function(v) {
+    rows += '<tr class="zone-row"><td><span class="zone-cat">Approved variation ' + v.vid + '</span><br><span class="zone-desc">' + v.sections.map(lineName).join(', ') + (v.discountEx ? ' (on site add-on, ' + PRICE.offers.onsitePct + '% off)' : '') + '</span></td><td class="price-col zone-price">' + fmt(v.totalEx) + '</td></tr>';
+  });
+  const hist = function(label, amt, cls) { return '<div class="payment-row' + (cls ? ' ' + cls : '') + '"><div>' + label + '</div><div class="p-amount">' + amt + '</div></div>'; };
+  let ph = hist('Contract total inc GST', fmt(k.contractInc));
+  if (k.variationsInc) ph += hist('Approved variations inc GST', '+' + fmt(k.variationsInc));
+  k.history.forEach(function(h) {
+    const meta = ' (' + h.invNo + (h.date ? ', ' + h.date : '') + ', ' + (h.paid ? 'paid' : 'unpaid') + ')';
+    ph += h.paid ? hist(h.label + meta, '-' + fmt(h.received)) : hist(h.label + meta + ' <span style="color:#c0392b;font-weight:700;">OUTSTANDING, not deducted</span>', '(' + fmt(h.amount) + ')');
+    if (h.early) ph += hist('Early payment discount on ' + h.invNo, '-' + fmt(h.early));
+  });
+  ph += hist('Balance remaining', fmt(k.balanceBefore), 'due');
+  const stageLabel = stage === 'deposit' ? k.money.deposit.pct + '% deposit (due to confirm booking)'
+    : stage === 'progress' ? 'Progress payment ' + k.progressNo
+    : stage === 'final' ? 'Final balance (due on completion)'
+    : stage === 'full' ? 'Full payment' : 'Paid in full';
+  let thisInv = stage === 'paid'
+    ? '<div class="payment-box"><div class="payment-title" style="color:#4caf6e;">✓ Paid in Full</div>' + hist('Total amount paid', fmt(k.received)) + '</div>'
+    : '<div class="payment-box"><div class="payment-title">This Invoice</div>' + hist(stageLabel, fmt(k.amount)) + hist('GST included', fmt(k.gst)) +
+      hist('Amount due by ' + fmtAUDate(due), fmt(k.amount), 'due') + hist('Balance after this invoice', fmt(k.balanceAfter)) + '</div>';
+  if (k.early) {
+    thisInv += '<div class="payment-box" style="border:2px solid #0ABAB5;background:#effaf9;"><div class="payment-title">Early Payment Discount</div>' +
+      '<p style="font-size:13px;margin:4px 0;"><strong>Pay ' + fmt(k.early.payBy) + ' by 11:59pm on ' + k.early.date + ' and save ' + fmt(k.early.discount) + '.</strong></p>' +
+      '<p style="font-size:10.5px;color:#555;margin:0;">Early payment discount applies only if the full balance is received by 11:59pm on the completion date. After that the full balance applies.</p></div>';
+  }
+  const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">' +
+    '<title>' + title + '</title><style>' + docCSS() + '</style></head><body>' +
+    docHeader('TAX INVOICE') +
+    '<div class="doc-body"><div class="inv-badge">TAX INVOICE · ' + invNo + '</div>' +
+    '<div class="client-box">' +
+    '<div class="client-row"><div class="client-label">Invoice To:</div><div class="client-value"><strong>' + client + '</strong></div></div>' +
+    '<div class="client-row"><div class="client-label">Phone:</div><div class="client-value">' + (c.phone||'—') + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Email:</div><div class="client-value">' + (c.email||'—') + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Site Address:</div><div class="client-value">' + ((c.address||'') + (c.suburb ? (c.address ? ', ' : '') + c.suburb : '') || '—') + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Quote Reference:</div><div class="client-value">' + (c.ref||'—') + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Invoice Date:</div><div class="client-value">' + fmtAUDate(date) + '</div></div>' +
+    '<div class="client-row"><div class="client-label">Due Date:</div><div class="client-value">' + fmtAUDate(due) + '</div></div></div>' +
+    '<div class="section-heading"><span class="section-num">1.</span><span class="section-title">Scope of Works</span></div>' +
+    '<table class="scope-table">' + rows + '</table>' +
+    '<div class="section-heading"><span class="section-num">2.</span><span class="section-title">Payment History</span></div>' +
+    '<div class="payment-box">' + ph + '</div>' + thisInv +
+    '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Terms &amp; Warranty</span></div>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;">' + paymentTermsHTML(m) + ' Warranty: <strong>' + warrantyText() + '</strong>.</p>' +
+    pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
+    '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invNo + '</strong></div>' +
+    (m.sections.some(function(x){ return x.key === 'spallCem'; }) ? cemWarrantyHTML() : '') +
+    (opts.notes ? '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Notes</span></div><div class="notes-box">' + String(opts.notes).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div>' : '') +
+    '<div class="disclaimer">Payment is due as per the terms above. Late payments incur fees as per the signed work contract. ' + docEntity().legalName + ' ABN ' + docEntity().abn + '</div>' +
+    '</div>' + docFooter() + '</body></html>';
+  return { html: html, calc: k, title: title, type: INVOICE_TYPES[stage] };
 }
 function quoteServiceNames(payload) {
   try {
@@ -1224,11 +1562,9 @@ function cleanSnapText(v) {
 }
 function quoteSnapshot() {
   const c = S.client;
-  const sections = buildSections();
-  let base = 0; sections.forEach(function(sec){ base += effSub(sec); });
-  let customItems = 0; S.custom.items.forEach(function(ci){ customItems += (ci.price||0); });
-  const adjustment = getAdjustment(base + customItems);
-  const total = base + customItems + adjustment;
+  const money = quoteMoney();
+  const sections = money.sections, adjustment = money.adjustment;
+  const total = money.totalEx;
   const lines = sections.map(function(sec) {
     return { category: cleanSnapText(sec.category), zoneName: cleanSnapText(sec.zoneName), desc: cleanSnapText(sec.desc),
              amount: r2(effSub(sec)), addons: sec.addons.map(function(a){ return cleanSnapText(a.label); }) };
@@ -1239,7 +1575,10 @@ function quoteSnapshot() {
   const so = spallingOptions();
   const options = so ? so.options.map(function(x){ return { option: x.n, name: x.name, exGst: r2(x.price), quoteIncGst: r2(x.totals.incGst), inTotal: x.n === so.include }; }) : [];
   const notes = sections.some(function(x){ return x.key === 'spallCem'; }) ? [CEM_WARRANTY_NOTE] : [];
+  money.extras.forEach(function(x){ lines.push({ category: cleanSnapText(x.label), zoneName:'', desc:'', amount: r2(x.ex), addons: [] }); });
   return { exGst: r2(total), gst: r2(total * 0.1), incGst: r2(total * 1.1), adjustment: r2(adjustment), lines: lines, options: options, notes: notes,
+           jobType: c.jobType || 'Domestic', deposit: money.deposit, warranty: warrantyText(), priority: !!offersState().priority,
+           offers: money.discounts, variationsInc: approvedVariationsInc(), accepted: S.accepted || null,
            ref: c.ref, service: docJobLabel(),
            client: { name: (c.first + ' ' + c.last).replace(/\s+/g, ' ').trim(), phone: c.phone, email: c.email,
                      address: c.address, suburb: c.suburb, area: c.area } };
@@ -1262,6 +1601,8 @@ function applyRestoredPayload(payload) {
     if (!S.coreHoles) S.coreHoles = [];
     if (!payload.state.auto) S.auto = { days:false, travel:false, waste:false };
     if (!S.travel || typeof S.travel !== 'object') S.travel = { mode:'suburb', place:'', km:0 };
+    if (!S.client.jobType) S.client.jobType = 'Domestic';
+    offersState();
     if (!S.generalAddons) S.generalAddons = freshState().generalAddons;
     if (!S.roofWash) S.roofWash = freshState().roofWash;
     if (!S.cancerPatches) S.cancerPatches = [];
@@ -1310,11 +1651,8 @@ function stampQuoteDates() {
     applyRestoredPayload({ state: JSON.parse(JSON.stringify(input.state || {})), measureShapes: input.measureShapes || [] });
     if (input.saveKey) S.saveKey = input.saveKey;
     showPricingBreakdown = !!input.showPrices;
-    var sections = buildSections();
-    var base = 0; sections.forEach(function (x) { base += effSub(x); });
-    var custom = 0; S.custom.items.forEach(function (ci) { custom += (ci.price || 0); });
-    var adj = getAdjustment(base + custom);
-    var ex = base + custom + adj;
+    var money = quoteMoney();
+    var sections = money.sections, adj = money.adjustment, ex = money.totalEx;
     return {
       state: JSON.parse(JSON.stringify(S)), measureShapes: measureShapes,
       lines: sections.map(function (x) { return { key: x.key, category: cleanSnapText(x.category), zoneName: cleanSnapText(x.zoneName), desc: cleanSnapText(x.desc), amount: r2(effSub(x)), addons: x.addons.map(function (a) { return { label: cleanSnapText(a.label), price: r2(a.price) }; }) }; }),
@@ -1325,10 +1663,23 @@ function stampQuoteDates() {
       days: S.custom.travelDays
     };
   }
+  // ---- server invoice: same document and payment history as the tool
+  function invoice(input) {
+    input = input || {};
+    applyPriceOverrides(input.prices || {});
+    applyRestoredPayload({ state: JSON.parse(JSON.stringify(input.state || {})), measureShapes: input.measureShapes || [] });
+    if (input.saveKey) S.saveKey = input.saveKey;
+    var opts = { ledger: input.ledger || [], amount: input.amount, invNo: input.invNo, date: new Date(input.date || Date.now()), completion: input.completion, notes: input.notes };
+    var doc = invoiceDocHtml(input.stage || 'deposit', input.invNo || '', opts);
+    var k = doc.calc;
+    return { html: doc.html, title: doc.title, type: doc.type, amount: k.amount, gst: k.gst, totalInc: k.totalInc, contractInc: k.contractInc,
+             paidToDate: k.paidToDate, balanceBefore: k.balanceBefore, balanceAfter: k.balanceAfter, progressNo: k.progressNo,
+             earlyDiscount: k.early ? k.early.discount : 0, deposit: k.money.deposit };
+  }
   function priceTable() {
     applyPriceOverrides({});
     return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });
   }
-  return { version: 'ce7b072e064b', run: run, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
+  return { version: 'e7035c58dc93', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
            setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };
 })();

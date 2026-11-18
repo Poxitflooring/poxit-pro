@@ -44,6 +44,7 @@ var PXA = {
   FLOOR_TYPES: { epoxy: 1, tinted: 1, seal: 1, gs: 1, aqua: 1, grind: 1, polished: 1, care: 1, shine: 1 }
 };
 
+function PXA_handles_(a) { return a === 'nextQuoteRef' || a === 'getPrices' || a === 'savePrices' || !!PXA.ACTIONS[a]; }
 // Called from doPost in PoxitInvoicing.gs. Returns null for actions this file does not handle.
 function PXA_route_(body) {
   var a = body && body.action;

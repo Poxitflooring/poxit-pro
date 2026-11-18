@@ -40,3 +40,10 @@ Run `PXI_setup` then `PXA_setup` once. `PXA_showKey` logs the secret key, `PXA_r
 `regeneratePdf` `{ "ref": "PXT-2026-112" }`
 
 Every create, update and regenerate returns `ref`, `key`, `totals` (exGst, gst, incGst), `lines`, `days`, `fileId`, `link`, `fileName`. The PDF (real text) goes to the Quotes folder as `PXT-ref - Client - Address.pdf`, one file per quote updated in place, and the link, totals and date are written back to the quote's row. Nothing here sends email.
+
+## Payments (Nov 2026)
+
+- `ledger` `{ "quoteKey": "PXT-1790…" }` (no key) lists every invoice for a quote: number, type, date, amount, paid, progress number, paid on time, early payment discount.
+- `setPaid` `{ "key": "<secret>", "invNo": "INV-2026-050", "paid": true, "onTime": true }` ticks an invoice paid (and, for a Final with an early payment offer, whether it was paid on time).
+- Invoice Requests now build the same invoice as the tool: payment history (only Paid invoices deducted, unpaid ones listed as outstanding), QBCC deposit limits for domestic jobs, progress invoices numbered per quote, early payment offer on finals.
+- `doPost` is the project's only doPost. Anything it doesn't handle, and any body that isn't JSON, goes to `doGet(e)`.

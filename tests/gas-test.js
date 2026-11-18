@@ -191,7 +191,45 @@ function boot(opts) {
   inv.getRange(2, 1, 1, 3).setValues([[r.ref, 'Jane', 'Deposit']]);
   env.run('PXI_processInvoiceRequests()');
   ok(inv.rows[1][5] === 'Done' && env.files[inv.rows[1][12]].folderId === IF, 'deposit invoice from an API quote lands in the Invoices folder');
-  ok(close(inv.rows[1][9], env.sheets.Sheet1.rows.find(x => x[0] === r.key)[10] / 2), 'deposit = half of the quote total on the row');
+  const rowInc = inv.rows[1][7]; // job total the invoice used (recalculated from the saved quote)
+  ok(close(inv.rows[1][9], Math.round(rowInc * 10) / 100), 'domestic deposit follows QBCC: 10% of ' + rowInc + ' = ' + inv.rows[1][9]);
+  const depFile = env.files[inv.rows[1][12]];
+  ok(depFile.data.indexOf('Payment History') > -1 && depFile.data.indexOf('Contract total inc GST') > -1 && depFile.data.indexOf('QBCC') > -1, 'sheet invoice uses the tool invoice (payment history, QBCC terms)');
+  // tick the deposit paid, then a progress and a final from the sheet
+  const invTab = env.sheets.Invoices;
+  ok(/key/i.test(env.post({ action: 'setPaid', invNo: inv.rows[1][6], paid: true }).message), 'setPaid needs the key');
+  ok(env.post({ action: 'setPaid', key: KEY, invNo: inv.rows[1][6], paid: true }).status === 'ok' && invTab.rows.find(x => x[0] === inv.rows[1][6])[9] === true, 'setPaid ticks the invoice Paid');
+  inv.getRange(3, 1, 1, 4).setValues([[r.ref, 'Jane', 'Progress', 1000]]);
+  inv.getRange(4, 1, 1, 4).setValues([[r.ref, 'Jane', 'Progress', 500]]);
+  env.run('PXI_processInvoiceRequests()');
+  ok(inv.rows[2][5] === 'Done' && inv.rows[3][5] === 'Done', 'two progress invoices from the sheet');
+  const pRows = invTab.rows.filter(x => x[2] === r.key && x[4] === 'Progress');
+  ok(pRows.length === 2 && pRows[0][15] === 1 && pRows[1][15] === 2, 'progress invoices number themselves 1 and 2');
+  ok(env.files[pRows[1][13]].data.indexOf('Less progress payment 1') > -1 && env.files[pRows[1][13]].data.indexOf('OUTSTANDING') > -1, 'progress 2 lists progress 1 as outstanding (not paid yet)');
+  const led = env.post({ action: 'ledger', quoteKey: r.key });
+  ok(led.status === 'ok' && led.invoices.length === 3 && led.invoices[0].paid === true && led.invoices[1].progressNo === 1, 'ledger returns every invoice with paid status');
+  inv.getRange(5, 1, 1, 3).setValues([[r.ref, 'Jane', 'Final']]);
+  env.run('PXI_processInvoiceRequests()');
+  const fRow = invTab.rows.find(x => x[2] === r.key && x[4] === 'Final');
+  const depAmt = invTab.rows.find(x => x[0] === inv.rows[1][6])[7];
+  ok(fRow && close(fRow[7], fRow[6] - depAmt) && close(fRow[6], rowInc), 'final = contract total minus only the paid deposit ' + (fRow && fRow[7]));
+  ok(fRow && fRow[17] > 0 && env.files[fRow[13]].data.indexOf('and save') > -1, 'final from the sheet carries the early payment offer (' + (fRow && fRow[17]) + ')');
+  ok(env.post({ action: 'setPaid', key: KEY, invNo: fRow[0], paid: true, onTime: true }).onTime === true && invTab.rows.find(x => x[0] === fRow[0])[16] === true, 'final ticked paid on time');
+
+  // ---- doPost passes anything it does not handle to doGet
+  env.ctx.doGet = function (e) { return env.globals.ContentService.createTextOutput(JSON.stringify({ via: 'doGet', q: e && e.parameter })); };
+  ok(JSON.parse(env.ctx.doPost({ postData: { contents: 'action=save&x=1' }, parameter: { action: 'save' } }).getContent()).via === 'doGet', 'a body that is not JSON goes to doGet');
+  ok(JSON.parse(env.ctx.doPost({ postData: { contents: JSON.stringify({ action: 'saveJob' }) }, parameter: {} }).getContent()).via === 'doGet', 'an action doPost does not handle goes to doGet');
+  ok(env.post({ action: 'getPrices' }).status === 'ok', 'own actions still answered by doPost');
+  const allSrc = ['PoxitPricing.gs', 'PoxitInvoicing.gs', 'PoxitApi.gs'].map(x => fs.readFileSync(path.join(ROOT, 'apps-script', x), 'utf8')).join('\n');
+  ok((allSrc.match(/^function doPost\(/mg) || []).length === 1 && !/^function doGet\(/m.test(allSrc), 'exactly one doPost in these files, and no doGet');
+  // a variation PDF goes to the Quotes folder without touching the quote PDF or the invoice log
+  const qv = env.files[r.fileId].versions, invCount = env.sheets.Invoices.getLastRow();
+  const vr = env.post({ action: 'savePdf', kind: 'Variation', key: r.key, ref: r.ref, vid: 'V1', fileName: 'Jane Citizen - Variation V1 - ' + r.ref + '.pdf', client: 'Jane Citizen', base64: Buffer.from('%PDF var').toString('base64') });
+  ok(vr.status === 'ok' && vr.fileId !== r.fileId && env.files[vr.fileId].folderId === QF && env.files[r.fileId].versions === qv && env.sheets.Invoices.getLastRow() === invCount, 'variation PDF saved alongside the quote, quote PDF untouched');
+  // the tool's invoice export records the progress number and early payment discount
+  const ti = env.post({ action: 'savePdf', kind: 'Invoice', key: r.key, ref: r.ref, invNo: 'INV-2026-777', invType: 'Final', amountDue: 1000, jobTotal: 5000, progressNo: 0, earlyDiscount: 150, fileName: 'x Final Invoice - INV-2026-777.pdf', client: 'Jane Citizen', base64: Buffer.from('%PDF i').toString('base64') });
+  ok(ti.status === 'ok' && env.sheets.Invoices.rows.find(x => x[0] === 'INV-2026-777')[17] === 150, 'tool invoice export logs the early payment discount');
 
   // ---- no Drive service: refuses rather than duplicating
   const env3 = boot({ noDrive: true });
