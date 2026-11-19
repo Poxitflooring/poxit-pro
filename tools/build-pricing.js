@@ -88,7 +88,7 @@ function build() {
     '  }\n' +
     '  function priceTable() {\n' +
     '    applyPriceOverrides({});\n' +
-    '    return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });\n' +
+    '    return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, text: !!r.text, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });\n' +
     '  }\n' +
     '  return { version: \'' + hash + '\', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,\n' +
     '           setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };\n' +

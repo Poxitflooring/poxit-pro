@@ -877,9 +877,14 @@ setTimeout(async ()=>{try{
  ok(run("document.querySelectorAll('#detailsContainer .zone-box').length")===4 && run("[].filter.call(document.querySelectorAll('#detailsContainer .radio-pill'),function(p){return p.textContent==='Invisible';}).length")===4,'FINISH on tinted and grind & seal too');
  run("S.tintedZones=[]; S.gsZones=[]; S.services.tinted=false; S.services.gs=false; renderDetails();");
  // Clean and seal
- ok(run("S.sealZones[0].type")==='Same-Day Sealer','SEAL new zones default to the same-day sealer');
+ ok(run("S.sealZones[0].type")==='Premium Next-Day Sealer','SEAL new zones default to the premium next-day sealer');
  var pills=run("[].map.call(document.querySelectorAll('#detailsContainer .zone-box')[1].querySelectorAll('.radio-group')[0].querySelectorAll('.radio-pill'),function(p){return p.textContent;}).join('|')");
- ok(pills==='Same-Day Sealer|Premium Next-Day Sealer','SEAL tier choice is same-day or premium next-day (got '+pills+')');
+ ok(pills==='Premium Next-Day Sealer','SEAL same-day is hidden by default (got '+pills+')');
+ run("setShowHidden(true)"); pills=run("[].map.call(document.querySelectorAll('#detailsContainer .zone-box')[1].querySelectorAll('.radio-group')[0].querySelectorAll('.radio-pill'),function(p){return p.textContent;}).join('|')");
+ ok(pills==='Same-Day Sealer|Premium Next-Day Sealer','SEAL show hidden options brings back same-day (got '+pills+')');
+ run("setSZ_type(0,'Same-Day Sealer'); setShowHidden(false);");
+ pills=run("[].map.call(document.querySelectorAll('#detailsContainer .zone-box')[1].querySelectorAll('.radio-group')[0].querySelectorAll('.radio-pill'),function(p){return p.textContent;}).join('|')");
+ ok(pills==='Same-Day Sealer|Premium Next-Day Sealer','SEAL a zone already on same-day still shows it with hidden options off');
  run("S.sealZones[0].area=30; calcAll();"); ok(Math.abs(JSON.parse(sec('seal-0')).subtotal-600)<0.001,'SEAL same-day 30m² @ $20 = $600');
  run("setSZ_type(0,'Premium Next-Day Sealer')"); ok(Math.abs(JSON.parse(sec('seal-0')).subtotal-1050)<0.001,'SEAL premium next-day 30m² @ $35 = $1,050');
  run("savePriceTable({'seal|Premium Next-Day Sealer':38})"); ok(Math.abs(JSON.parse(sec('seal-0')).subtotal-1140)<0.001,'SEAL rates editable in the price table ($38 → $1,140)');
@@ -898,7 +903,7 @@ setTimeout(async ()=>{try{
  ep=JSON.parse(sec('epoxy-0')); ok(Math.abs(ep.subtotal-(45*90+900))<0.001 && ep.addons.some(function(a){return a.label==='Walls (10m² @ $90/m²)';}),'WALLS epoxy walls default to the floor rate ($900)');
  run("S.epoxyZones[0].wallRate='70'; calcAll();"); ok(Math.abs(JSON.parse(sec('epoxy-0')).subtotal-(4050+700))<0.001,'WALLS wall rate editable ($700)');
  run("S.epoxyZones[0].walls=false; S.epoxyZones[0].wallRate='';");
- [['tinted',30],['seal',20],['gs',85],['aqua',20]].forEach(function(x){
+ [['tinted',30],['seal',35],['gs',85],['aqua',20]].forEach(function(x){
    run("S.services."+x[0]+"=true; addZone('"+x[0]+"'); var z=S."+x[0]+"Zones[S."+x[0]+"Zones.length-1]; z.area=40; z.walls=true; z.wallM2=5; calcAll();");
    var sc=JSON.parse(sec(x[0]+'-0')); ok(sc && sc.addons.some(function(a){return a.label==='Walls (5m² @ $'+x[1]+'/m²)' && Math.abs(a.price-5*x[1])<0.001;}),'WALLS on '+x[0]+' ($'+(5*x[1])+')');
  });
@@ -911,7 +916,7 @@ setTimeout(async ()=>{try{
  ok(run("PRICE.comm['Hychem Premium'].coving")===80 && run("PRICE.comm['Sika Standard'].coving")===80,'COVING commercial $80/lm');
  run("S.epoxyZones[0].addons.turnup=false; S.epoxyZones[0].addons.coving=false; calcAll();");
  // Price table is internal only
- var spec=run("JSON.stringify(priceTableSpec().map(function(g){return g.rows.filter(function(r){return typeof priceGet(PRICE,r.path)!=='number';}).length;}))");
+ var spec=run("JSON.stringify(priceTableSpec().map(function(g){return g.rows.filter(function(r){return typeof priceGet(PRICE,r.path)!==(r.text?'string':'number');}).length;}))");
  ok(JSON.parse(spec).every(function(n){return n===0;}),'PRICE TABLE every row points at a real rate');
  run("openPriceTable()"); ok(run("document.querySelectorAll('#priceTableBody [data-pt]').length")>80,'PRICE TABLE opens with all rates editable');
  run("savePriceTable({'epoxy|Flake Internal':-5,'addons|coving':'abc','travelRate':2})"); ok(run("PRICE.epoxy['Flake Internal']")===90 && run("PRICE.addons.coving")===50 && run("PRICE.travelRate")===2,'PRICE TABLE ignores bad entries');
@@ -975,7 +980,10 @@ setTimeout(async ()=>{try{
  run("closeDocOverlay(); window.confirm=function(){return true;}; window.alert=function(){}; openDoc=function(h){window.__doc=h;}; freshState=window.__freshStateAuto; applyPriceOverrides({}); confirmReset(false); measureShapes=[]; S.auto={days:false,travel:false,waste:false};");
  // 1. pressure washing and ramping
  run("S.pwZones=[{name:'Drive',area:100}]; S.pwJob.tier='Standard'; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-800)<0.001,'PW Standard 100m² = $8/m² = $800');
- run("S.pwZones[0].area=120; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-720)<0.001 && JSON.parse(sec('pw')).addons[0].label.indexOf('$6/m²')>-1,'PW Standard 120m² = whole area at $6 = $720');
+ run("S.pwZones[0].area=120; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-920)<0.001 && JSON.parse(sec('pw')).addons[0].label==='First 100m² @ $8/m²' && JSON.parse(sec('pw')).addons[1].label==='Next 20m² @ $6/m²','PW Standard 120m² = 100 @ $8 + 20 @ $6 = $920');
+ run("S.pwZones[0].area=100; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-800)<0.001,'PW Standard 100m² = $800 (all at $8)');
+ run("S.pwZones[0].area=20; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-250)<0.001,'PW Standard 20m² lifts to the $250 minimum');
+ run("S.pwZones[0].area=120; calcAll();");
  run("S.pwZones[0].area=20; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-250)<0.001,'PW $250 minimum kept');
  run("S.pwZones[0].area=150; S.pwJob.tier='Basic'; calcAll();"); ok(Math.abs(JSON.parse(sec('pw')).subtotal-750)<0.001,'PW Basic tier unchanged ($5/m²)');
  run("S.pwZones=[]; S.pwJob.tier='Standard'; S.ramps=[{name:'Garage lip',rise:50,width:1,ratio:12,material:'epoxysand'}]; calcAll();");
@@ -983,7 +991,7 @@ setTimeout(async ()=>{try{
  run("S.ramps[0].rise=20; calcAll();"); ok(Math.abs(JSON.parse(sec('ramping')).subtotal-250)<0.001,'RAMP 1 batch ($165) lifts to the $250 minimum');
  run("S.ramps=[]; calcAll();");
  // 2-5. offers on a dummy quote: epoxy 45m² + patio seal 30m²
- run("S.client.first='Offer'; S.client.last='Test'; S.client.location='Internal'; S.services.epoxy=true; S.services.seal=true; addZone('epoxy'); S.epoxyZones[0].name='Garage'; S.epoxyZones[0].area=45; addZone('seal'); S.sealZones[0].name='Patio'; S.sealZones[0].area=30; calcAll();");
+ run("S.client.first='Offer'; S.client.last='Test'; S.client.location='Internal'; S.services.epoxy=true; S.services.seal=true; addZone('epoxy'); S.epoxyZones[0].name='Garage'; S.epoxyZones[0].area=45; addZone('seal'); S.sealZones[0].name='Patio'; S.sealZones[0].type='Same-Day Sealer'; S.sealZones[0].area=30; calcAll();");
  ok(Math.abs(total()-4650)<0.001,'OFFERS base job $4,650 ex GST');
  run("setOffer('warranty','extended')"); ok(Math.abs(total()-4650*1.1)<0.001,'WARRANTY 5 years = 10% of job ex GST ($465)');
  run("savePriceTable({'offers|warrantyCap':300})"); ok(Math.abs(total()-4950)<0.001,'WARRANTY cap setting ($300)');
@@ -1034,7 +1042,7 @@ setTimeout(async ()=>{try{
  run("LEDGER.rows[1].onTime=false;"); ok(Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).discountsTaken"))<0.001 && Math.abs(run("invoiceCalc('final',{ledger:LEDGER.rows}).received")-r2(run("quoteMoney().incGst")))<0.001,'EARLY PAY not on time: no discount, the full amount is owed');
  run("LEDGER.rows=[]; S.client.jobType='Domestic'; showTab('save');"); ok(!!run("document.getElementById('ledgerBox')") && run("document.getElementById('ledgerBox').innerHTML").indexOf('Balance owing')>-1,'LEDGER payment view on the Save step');
  // variations
- run("setAccepted(true); addOnsiteArea('seal'); var z=S.sealZones[S.sealZones.length-1]; z.area=20; calcAll();");
+ run("setAccepted(true); addOnsiteArea('seal'); var z=S.sealZones[S.sealZones.length-1]; z.type='Same-Day Sealer'; z.area=20; calcAll();");
  var vl=JSON.parse(run("JSON.stringify(variationList().map(function(v){return {vid:v.vid,ex:v.ex,d:v.discountEx,days:v.days,ap:v.approved};}))"));
  ok(vl.length===1 && vl[0].vid==='V1' && Math.abs(vl[0].ex-400)<0.001 && Math.abs(vl[0].d+60)<0.001 && vl[0].days===1,'ONSITE area added after acceptance: variation V1, 15% off, +1 day');
  var vbefore=run("quoteMoney().incGst"); ok(run("quoteMoney().sections.every(function(x){return x.key!=='seal-1';})"),'ONSITE added area stays out of the original contract');
@@ -1048,7 +1056,8 @@ setTimeout(async ()=>{try{
  ok(cb.indexOf('Next available start dates')<0,'CLOSE hides start dates with no calendar connected');
  ok(/Book today and save \$\d/.test(cb) && (cb.match(/close-offer/g)||[]).length===1,'CLOSE opens on the book today offer in dollars');
  run("nextCloseOffer(); nextCloseOffer(); nextCloseOffer(); nextCloseOffer(); nextCloseOffer();"); var cb2=run("document.getElementById('closeBox').innerHTML");
- ok((cb2.match(/close-offer/g)||[]).length===6 && cb2.indexOf('Next offer')<0,'CLOSE Next offer reveals bundle, price lock, Care Plan credit, priority and warranty');
+ run("nextCloseOffer();"); cb2=run("document.getElementById('closeBox').innerHTML");
+ ok((cb2.match(/close-offer/g)||[]).length===7 && cb2.indexOf('Next offer')<0,'CLOSE Next offer reveals bundle, price lock, Care Plan credit, Black Label, priority and warranty');
  ok(!/\d+% off<\/h3>/.test(cb2.replace('save 10% on it','')) ,'CLOSE every offer headline is a dollar amount');
  run("toggleCloseOffer('bookNow'); toggleCloseOffer('careCredit'); toggleCloseOffer('bundle');"); ok(run("closeChosenDiscounts().length")===2,'CLOSE respects the two offer maximum');
  run("window.__fo18=window.fetch; window.fetch=function(u,o){ if(o&&o.method==='POST'){ var b=JSON.parse(o.body); if(b.action==='nextQuoteRef') return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',number:301,ref:'PXT-2026-301'}));}}); if(b.action==='nextInvoice') return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',number:60,ref:'INV-2026-060'}));}}); return Promise.resolve({text:function(){return Promise.resolve(JSON.stringify({status:'ok',invoices:[]}));}}); } return Promise.resolve({json:function(){return Promise.resolve({status:'saved',quotes:[],jobs:[]});}}); };");
@@ -1072,5 +1081,47 @@ setTimeout(async ()=>{try{
  var q19=await run("nextQuoteRef().then(function(r){return r.ref;})");
  ok(q19==='PXT-'+new Date().getFullYear()+'-126','offline quote ref carries on from the sheet (PXT-…-126), never restarts at 001 on a new device');
  run("window.fetch=window.__fo19; window.alert=window.__al19; closeDocOverlay(); confirmReset(false);");
+ // ===================== 20 NOV: epoxy finish tiers, seal default, pressure washing =====================
+ run("confirmReset(false); S.client.first='Tier'; S.client.last='Test'; S.client.location='Internal'; S.client.suburb='Upper Coomera'; S.services.epoxy=true; addZone('epoxy'); var z=S.epoxyZones[0]; z.name='Garage'; z.area=40; z.flake='Marble Tone'; z.addons.nonslip=true; S.auto.days=true; showTab('services'); showSub('floors'); renderDetails(); calcAll();");
+ var ez=function(){ return JSON.parse(sec('epoxy-0')); };
+ ok(run("S.epoxyZones[0].tier")==='classic' && Math.abs(ez().subtotal-4200)<0.001,'TIER new zones are Classic: 40m² @ $95 (Marble Tone) + non slip $400 = $4,200');
+ var dh=run("document.getElementById('detailsContainer').innerHTML");
+ ok(['Classic','Gold','Platinum','Black Label'].every(function(n){ return dh.indexOf('>'+n+' <span')>-1; }) && dh.indexOf('<label>Sheen</label>')>-1,'TIER Finish selector shows the four finishes (gloss/matte pills now labelled Sheen)');
+ ok(dh.indexOf('Fast-Cure Polyaspartic')<0,'TIER fast cure add-on gone from flake and quartz zones');
+ var d0=run("estimateDays().days");
+ run("setTier(0,'gold')"); ok(Math.abs(ez().subtotal-4800)<0.001 && ez().addons.some(function(a){return a.label==='Gold finish (40m² @ $15/m²)' && a.price===600;}),'TIER Gold +$15/m² stacks on flake and non slip ($4,800)');
+ ok(run("estimateDays().days")===d0+1 && run("tierSpec(S.epoxyZones[0]).extraCoat")===1,'TIER Gold adds 1 day on site and 1 coat of disposables');
+ run("setTier(0,'platinum')"); ok(Math.abs(ez().subtotal-5000)<0.001 && run("estimateDays().days")===d0,'TIER Platinum 1 coat +$20/m², no extra day');
+ run("S.epoxyZones[0].platCoats='2'; calcAll();"); ok(Math.abs(ez().subtotal-5800)<0.001 && ez().addons[0].label.indexOf('2 coats polyaspartic topcoat')>-1,'TIER Platinum 2 coats +$40/m²');
+ run("setTier(0,'blackLabel')"); ok(Math.abs(ez().subtotal-(3800+2000))<0.001 && !ez().addons.some(function(a){return /Non-slip/.test(a.label);}),'TIER Black Label +$50/m² and non slip comes off ($5,800)');
+ ok(run("S.epoxyZones[0].addons.nonslip")===false && run("document.getElementById('detailsContainer').innerHTML").indexOf('Not with Black Label')>-1,'TIER non slip cannot go on Black Label');
+ ok(run("tierSpec(S.epoxyZones[0]).floodL")===44 && run("estimateDays().days")===d0+1 && run("document.getElementById('detailsContainer').innerHTML").indexOf('clear flood epoxy 44 L')>-1,'TIER Black Label: 44 L clear flood epoxy (1 L/m² + 10%), +1 day, +1 coat');
+ run("S.epoxyZones[0].sys='Flake External'; calcAll();"); ok(Math.abs(ez().subtotal-40*(110+5+50))<0.001,'TIER uplift sits on the external base rate too ($110 + $50)');
+ run("S.epoxyZones[0].sys='Quartz Internal'; setTier(0,'gold');"); ok(Math.abs(ez().subtotal-40*(95+15))<0.001,'TIER quartz gets the Finish selector too');
+ run("S.epoxyZones[0].sys='Metallic Internal'; renderDetails(); calcAll();"); ok(!ez().addons.some(function(a){return /finish \(/.test(a.label);}) && run("document.getElementById('detailsContainer').innerHTML").indexOf('Fast-Cure Polyaspartic')>-1,'TIER metallic has no Finish tiers and keeps its fast cure add-on');
+ run("S.epoxyZones[0].sys='Flake Internal'; setTier(0,'gold'); generatePDF();"); var td=run("window.__doc");
+ ok(td.indexOf('<strong>Gold finish:</strong> a subtle gloss with a light texture, great for interiors like kitchens and hallways.')>-1,'QUOTE shows the finish name and its one line description');
+ ok(!/[‐-―-]/.test(run("FINISH_TIERS.map(function(t){return PRICE.finishDesc[t];}).join(' ')")),'QUOTE finish descriptions have no hyphens or dashes');
+ run("savePriceTable({'finishName|gold':'Gold Plus','finish|gold':18}); generatePDF();"); td=run("window.__doc");
+ ok(td.indexOf('<strong>Gold Plus finish:</strong>')>-1 && Math.abs(ez().subtotal-40*(95+18))<0.001,'SETTINGS finish names and uplifts are editable in the Price Table');
+ run("openPriceTable()"); ok(run("document.querySelectorAll('#priceTableBody input[type=text][data-pt^=\"finishName\"]').length")===4,'SETTINGS name fields are text boxes');
+ run("closePriceTable(); savePriceTable({}); closeDocOverlay();");
+ // Close screen upsell: Classic on an internal area offers Black Label at the difference
+ run("setTier(0,'classic'); S.epoxyZones[0].addons.nonslip=true; S.client.date=fmtAUDate(new Date()); calcAll(); CLOSE={step:0,chosen:{},prev:{}};");
+ var ups=JSON.parse(run("JSON.stringify(blackLabelUpsells())"));
+ ok(ups.length===1 && ups[0].title==='Upgrade Garage to Black Label: +$1,760.00' && /^Our flagship\. A smooth, deep, high gloss finish/.test(ups[0].sub),'UPSELL Classic internal area: Black Label for +$1,760 inc GST ($2,000 less the $400 non slip, plus GST)');
+ var bl20=run("quoteMoney().incGst"); run("CLOSE.step=9; renderClose(); toggleCloseOffer('blackLabel-0');");
+ ok(run("S.epoxyZones[0].tier")==='blackLabel' && Math.abs(run("quoteMoney().incGst")-bl20-1760)<0.01 && run("document.getElementById('closeBox').innerHTML").indexOf('✓ Added')>-1,'UPSELL Add this switches the area to Black Label and the price goes up by exactly that');
+ run("toggleCloseOffer('blackLabel-0')"); ok(run("S.epoxyZones[0].tier")==='classic' && run("S.epoxyZones[0].addons.nonslip")===true && Math.abs(run("quoteMoney().incGst")-bl20)<0.01,'UPSELL tapping again puts Classic and non slip back');
+ run("S.epoxyZones[0].sys='Flake External'; calcAll();"); ok(run("blackLabelUpsells().length")===0,'UPSELL not offered on external areas');
+ run("S.epoxyZones[0].sys='Flake Internal'; setTier(0,'gold');"); ok(run("blackLabelUpsells().length")===0,'UPSELL only when Classic is picked');
+ // old quotes: fast cure becomes Platinum, no double charge
+ run("var st=JSON.parse(JSON.stringify(S)); st.epoxyZones[0].tier=undefined; delete st.epoxyZones[0].tier; st.epoxyZones[0].addons.fastcure=true; st.epoxyZones[0].addons.fastcureCoats='2'; st.epoxyZones[0].addons.nonslip=false; restoreQuote({state:st,measureShapes:[]}); calcAll();");
+ ok(run("S.epoxyZones[0].tier")==='platinum' && run("S.epoxyZones[0].platCoats")==='2' && run("S.epoxyZones[0].addons.fastcure")===false && Math.abs(ez().subtotal-40*(95+40))<0.001,'OLD QUOTE fast cure 2 coats opens as Platinum 2 coats, charged once');
+ // Clean and seal default and pressure washing
+ run("S.services.seal=true; addZone('seal'); calcAll();"); ok(run("S.sealZones[0].type")==='Premium Next-Day Sealer','SEAL Premium Next Day is the default');
+ ok(run("SERVICES.find(function(x){return x.key==='seal';}).rate").indexOf('Same-day')<0,'SEAL service tile no longer advertises same-day');
+ run("S.pwJob=freshState().pwJob; S.pwJob.tier='Standard'; S.pwZones=[{name:'Drive',area:180}]; calcAll();"); ok(Math.abs(run("pwCalc().total")-(800+80*6))<0.001,'PW Standard 180m² = 100 @ $8 + 80 @ $6 = $1,280');
+ run("confirmReset(false);");
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

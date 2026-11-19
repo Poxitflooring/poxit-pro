@@ -520,7 +520,14 @@ const PRICE = {
     porcelain: { overtop:20, grindout:65 },
     stone: { overtop:25, grindout:85 }
   },
-  fastcure: { '1':20, '2':40 },
+  fastcure: { '1':20, '2':40 },  // Platinum finish: polyaspartic topcoat, 1 or 2 coats
+  // Finish tiers for flake and quartz zones: uplift $/m² on top of the zone's rate (non slip, flake range etc still stack)
+  finish: { classic:0, gold:15, blackLabel:50, floodLm2:1, floodWastePct:10 },
+  finishName: { classic:'Classic', gold:'Gold', platinum:'Platinum', blackLabel:'Black Label' },
+  finishDesc: { classic:'a durable textured finish, ideal for garages and outdoor areas.',
+                gold:'a subtle gloss with a light texture, great for interiors like kitchens and hallways.',
+                platinum:'a premium fast curing topcoat with superior UV and scuff resistance.',
+                blackLabel:'our flagship. A smooth, deep, high gloss finish for living areas and showpiece garages.' },
   logo: { '150':'Over-Flake Small — $150', '250':'Over-Flake Medium — $250', '200':'Flat/Dead-Flat Small — $200', '350':'Flat/Dead-Flat Medium — $350' },
   stencil: { '25':'Easy — $25/m²', '40':'Medium — $40/m²', '60':'Hard — $60/m²', '85':'Very Hard — $85/m²' },
   tintedPrep: { 'Pressure Wash':30, 'Grind Prep':60 },
@@ -625,6 +632,7 @@ const PRICE = {
 // ===== PRICE TABLE (internal only: never printed on any document) =====
 // Every rate below can be changed in ⚙ Price Table. Changes are kept on this device and, with the sheet key,
 // in the quote sheet's "Price Table" tab so every device and the sheet API price the same way.
+const FINISH_TIERS = ['classic','gold','platinum','blackLabel'];
 const PRICE_DEFAULTS = JSON.parse(JSON.stringify(PRICE, function(k, v){ return v === Infinity ? 'Infinity' : v; }));
 function priceTableSpec() {
   const g = [];
@@ -638,10 +646,16 @@ function priceTableSpec() {
     .concat(Object.keys(PRICE.coat).filter(function(k){ return k !== 'None' && k !== 'Poxit Overlay'; }).map(function(k){ return { path:['coat',k], label:k, unit:'$/m²' }; })) });
   g.push({ title:'Epoxy add-ons', rows: [
     { path:['addons','nonslip'], label:'Non-slip aggregate', unit:'$/m²' }, { path:['addons','mvb'], label:'Moisture vapour barrier', unit:'$/m²' },
-    { path:['addons','xtopcoat'], label:'Extra topcoat', unit:'$/m²' }, { path:['fastcure','1'], label:'Fast-cure polyaspartic, 1 coat', unit:'$/m²' },
-    { path:['fastcure','2'], label:'Fast-cure polyaspartic, 2 coats', unit:'$/m²' }, { path:['addons','turnup'], label:'Turn-ups 100mm', unit:'$/lm' },
+    { path:['addons','xtopcoat'], label:'Extra topcoat', unit:'$/m²' }, { path:['addons','turnup'], label:'Turn-ups 100mm', unit:'$/lm' },
     { path:['addons','silicone'], label:'Silicone bead', unit:'$/lm' }, { path:['addons','coving'], label:'Coving (standard)', unit:'$/lm' },
     { path:['addons','border'], label:'Border / banding', unit:'$/lm' } ] });
+  g.push({ title:'Epoxy finish (flake and quartz)', note:'Uplift per m² on top of the zone rate. Names and descriptions print on the quote. Fast cure polyaspartic is the Platinum finish (Metallic and Solid Colour zones still have it as an add-on).', rows: [
+    { path:['finish','classic'], label:'Classic', unit:'$/m²' }, { path:['finish','gold'], label:'Gold (extra build coat, +1 day)', unit:'$/m²' },
+    { path:['fastcure','1'], label:'Platinum, 1 coat polyaspartic topcoat', unit:'$/m²' }, { path:['fastcure','2'], label:'Platinum, 2 coats polyaspartic topcoat', unit:'$/m²' },
+    { path:['finish','blackLabel'], label:'Black Label (flood coat, +1 day)', unit:'$/m²' },
+    { path:['finish','floodLm2'], label:'Black Label clear flood epoxy', unit:'L/m²' }, { path:['finish','floodWastePct'], label:'Black Label flood epoxy waste', unit:'%' } ]
+    .concat(FINISH_TIERS.map(function(k){ return { path:['finishName',k], label:'Name: ' + PRICE_DEFAULTS.finishName[k], unit:'text', text:true }; }))
+    .concat(FINISH_TIERS.map(function(k){ return { path:['finishDesc',k], label:'Description: ' + PRICE_DEFAULTS.finishName[k], unit:'text', text:true }; })) });
   g.push({ title:'Matte topcoat (epoxy)', note:'Price per m² = kit cost ÷ kit coverage × markup. Default mix: 500 g matting agent per 20 L Armourthane kit.', rows: [
     { path:['matte','kitCost'], label:'Matting agent cost per 20 L kit', unit:'$' }, { path:['matte','kitM2'], label:'Coverage per kit', unit:'m²' },
     { path:['matte','markup'], label:'Markup', unit:'×' } ] });
@@ -685,7 +699,7 @@ function priceTableSpec() {
     { path:['joint'], label:'Control joint', unit:'$/lm' }, { path:['routing'], label:'Routing', unit:'$/lm' }, { path:['softcut'], label:'Soft cut', unit:'$/lm' },
     { path:['silJoint'], label:'Silicone joint filling', unit:'$/lm' }, { path:['polyJoint'], label:'Polyurethane joint filling', unit:'$/lm' } ] });
   g.push({ title:'Pressure washing', rows: Object.keys(PRICE.pw).map(function(k){ return { path:['pw',k], label:k, unit:'$/m²' }; })
-    .concat([{ path:['pwBulk','over'], label:'Standard tier: bulk rate applies over', unit:'m²' }, { path:['pwBulk','rate'], label:'Standard tier bulk rate (whole area)', unit:'$/m²' },
+    .concat([{ path:['pwBulk','over'], label:'Standard tier: full rate up to', unit:'m²' }, { path:['pwBulk','rate'], label:'Standard tier rate beyond that', unit:'$/m²' },
              { path:['pwMin'], label:'Wash minimum', unit:'$' }, { path:['pwAqua'], label:'AquaSeal after wash', unit:'$/m²' }]) });
   g.push({ title:'Site & travel', rows: [
     { path:['travelFreeKm'], label:'Free travel zone', unit:'km' }, { path:['travelRate'], label:'Travel rate', unit:'$/km' },
@@ -704,6 +718,11 @@ function applyPriceOverrides(map) {
   priceTableSpec().forEach(function(g){ g.rows.forEach(function(r) {
     const k = priceKey(r.path);
     const def = priceGet(PRICE_DEFAULTS, r.path);
+    if (r.text) {
+      const t = map && map[k] !== undefined && map[k] !== null ? String(map[k]).replace(/\s+/g, ' ').trim() : '';
+      if (t && t !== def) { priceSet(PRICE, r.path, t); ok[k] = t; } else priceSet(PRICE, r.path, def);
+      return;
+    }
     const v = map && map[k] !== undefined && map[k] !== '' ? parseFloat(map[k]) : NaN;
     if (isFinite(v) && v >= 0 && v !== def) { priceSet(PRICE, r.path, v); ok[k] = v; }
     else priceSet(PRICE, r.path, def);
@@ -739,7 +758,8 @@ function openPriceTable() {
     g.rows.forEach(function(r) {
       const k = priceKey(r.path), v = priceGet(PRICE, r.path), def = priceGet(PRICE_DEFAULTS, r.path);
       h += '<div class="pt-row' + (v !== def ? ' changed' : '') + '"><label title="Original: ' + def + '">' + esc(r.label) + '</label><span class="pt-unit">' + esc(r.unit) + '</span>' +
-        '<input type="number" min="0" step="0.01" data-pt="' + esc(k) + '" value="' + v + '"></div>';
+        (r.text ? '<input type="text" data-pt="' + esc(k) + '" value="' + esc(v) + '" style="flex:2;">'
+                : '<input type="number" min="0" step="0.01" data-pt="' + esc(k) + '" value="' + v + '">') + '</div>';
     });
     h += '</div>';
   });
@@ -781,7 +801,7 @@ function resetPriceTable() {
 const SERVICES = [
   { key:'epoxy',    icon:'🪨', name:'Epoxy Flooring', rate:'Flake / Quartz / Metallic / Solid Colour — from $65/m²' },
   { key:'tinted',   icon:'🎨', name:'Tinted Sealant', rate:'Pressure wash $30/m² · Grind prep $60/m²' },
-  { key:'seal',     icon:'💧', name:'Cleaning &amp; Sealing', rate:'Same-day sealer $20/m² · Premium next-day $35/m²' },
+  { key:'seal',     icon:'💧', name:'Cleaning &amp; Sealing', rate:'Premium next-day sealer $35/m²' },
   { key:'gs',       icon:'🪓', name:'Grind &amp; Seal', rate:'Prep + seal — Premium $85/m² · Elite $90/m²' },
   { key:'grind',    icon:'⚙️', name:'Concrete Grinding', rate:'$40–$50/m²' },
   { key:'polished', icon:'✨', name:'Polished Concrete', rate:'Mechanical polish — $120/m²' },
@@ -933,6 +953,18 @@ function pills(options, selected, fn, idx) {
 // ===== Shared zone pieces: area with Import measurement, finish, walls =====
 const FINISHES = ['Matte','Invisible','Gloss'];
 const SEAL_TIERS = ['Same-Day Sealer','Premium Next-Day Sealer'];
+// Same-Day Sealer stays in the tool but is hidden unless "Show hidden options" is on (or the zone already uses it)
+const HIDDEN_SEAL = ['Same-Day Sealer'];
+let SHOW_HIDDEN = null;
+function showHidden() {
+  if (SHOW_HIDDEN === null) { try { SHOW_HIDDEN = localStorage.getItem('poxit_show_hidden') === '1'; } catch(e) { SHOW_HIDDEN = false; } }
+  return !!SHOW_HIDDEN;
+}
+function setShowHidden(on) { SHOW_HIDDEN = !!on; try { localStorage.setItem('poxit_show_hidden', on ? '1' : '0'); } catch(e) {} renderDetails(); }
+function sealTierChoices(z) {
+  const list = SEAL_TIERS.filter(function(t){ return showHidden() || HIDDEN_SEAL.indexOf(t) < 0 || t === z.type; });
+  return list.indexOf(z.type) > -1 ? list : list.concat([z.type]);
+}
 function measureTotalM2() { let t = 0; measureShapes.forEach(function(x){ t += shapeArea(x); }); return Math.round(t*100)/100; }
 function importSel(path) {
   const named = measureShapes.map(function(x, k){ return { k:k, a:shapeArea(x), label:String(x.label || '').trim() || ('Shape ' + (k+1)) }; })
@@ -957,7 +989,7 @@ function areaField(list, i) {
 }
 function finishField(list, i) {
   const z = S[list][i];
-  return '<div class="field"><label>Finish</label><div class="radio-group">' + FINISHES.map(function(f) {
+  return '<div class="field"><label>' + (list === 'epoxyZones' && tierApplies(z) ? 'Sheen' : 'Finish') + '</label><div class="radio-group">' + FINISHES.map(function(f) {
     return '<div class="radio-pill ' + (z.finish === f ? 'selected' : '') + '" onclick="setZoneVal(\'' + list + '\',' + i + ',\'finish\',\'' + f + '\')">' + f + '</div>';
   }).join('') + '</div>' +
   (list === 'epoxyZones' && z.finish === 'Matte' ? '<div class="info-box" style="font-size:10px;margin-top:6px;">Matte topcoat add-on: <strong>' + (matteRate() > 0 ? '$' + matteRate().toFixed(2) + '/m²' : 'set the matting kit cost in ⚙ Price Table') + '</strong> (matting agent mixed into the Armourthane topcoat).</div>' : '') +
@@ -965,6 +997,65 @@ function finishField(list, i) {
 }
 function setZoneVal(list, i, key, v) { S[list][i][key] = v; renderDetails(); calcAll(); }
 function finishText(z) { return z && z.finish ? ' · ' + z.finish + ' finish' : ''; }
+// ---- Finish tiers (flake and quartz epoxy): Classic, Gold, Platinum, Black Label
+function tierApplies(z) { return !!z && /^(Flake|Quartz) /.test(z.sys || ''); }
+// Old quotes and API input: no tier means Classic; the old fast cure add-on on a flake or quartz zone becomes Platinum
+function normalizeEpoxyZone(z) {
+  if (!z) return z;
+  if (FINISH_TIERS.indexOf(z.tier) < 0) z.tier = 'classic';
+  if (z.platCoats !== '2') z.platCoats = '1';
+  const a = z.addons || (z.addons = {});
+  if (tierApplies(z)) {
+    if (a.fastcure) { z.tier = 'platinum'; z.platCoats = a.fastcureCoats === '1' ? '1' : '2'; a.fastcure = false; }
+    if (z.tier === 'blackLabel') a.nonslip = false;
+  }
+  return z;
+}
+function zoneTier(z) { return tierApplies(z) ? z.tier : ''; }
+function tierRate(z) {
+  const t = zoneTier(z);
+  if (t === 'platinum') return PRICE.fastcure[z.platCoats] || 0;
+  return t ? (PRICE.finish[t] || 0) : 0;
+}
+function tierName(t) { return (PRICE.finishName && PRICE.finishName[t]) || t; }
+function tierLine(z) {
+  const t = zoneTier(z), area = z.area || 0, r = tierRate(z);
+  if (!t || !(r > 0) || !(area > 0)) return null;
+  return { label: tierName(t) + ' finish' + (t === 'platinum' ? ', ' + z.platCoats + ' coat' + (z.platCoats === '2' ? 's' : '') + ' polyaspartic topcoat' : '') + ' (' + area + 'm² @ $' + r + '/m²)', price: area * r };
+}
+// Internal job sheet numbers: extra coats of disposables, extra day, Black Label flood epoxy
+function tierSpec(z) {
+  const t = zoneTier(z), area = parseFloat(z.area) || 0;
+  const extraCoat = t === 'gold' || t === 'blackLabel' ? 1 : 0;
+  const floodL = t === 'blackLabel' ? Math.ceil(area * (PRICE.finish.floodLm2 || 0) * (1 + (PRICE.finish.floodWastePct || 0) / 100) * 10 - 1e-9) / 10 : 0;
+  return { tier:t, extraCoat:extraCoat, extraDay: extraCoat > 0 && area > 0, floodL:floodL };
+}
+function setTier(i, t) {
+  const z = S.epoxyZones[i];
+  z.tier = t;
+  if (t === 'blackLabel') z.addons.nonslip = false;
+  renderDetails(); calcAll();
+}
+function tierField(i) {
+  const z = S.epoxyZones[i];
+  if (!tierApplies(z)) return '';
+  const pill = function(t) {
+    const r = t === 'platinum' ? '+$' + PRICE.fastcure['1'] + '/' + PRICE.fastcure['2'] : (PRICE.finish[t] > 0 ? '+$' + PRICE.finish[t] : '+$0');
+    return '<div class="radio-pill ' + (z.tier === t ? 'selected' : '') + '" onclick="setTier(' + i + ',\'' + t + '\')">' + tierName(t) + ' <span style="opacity:.6;font-size:10px;">' + r + '</span></div>';
+  };
+  const sp = tierSpec(z);
+  const notes = [];
+  if (sp.extraCoat) notes.push('+1 coat of disposables');
+  if (sp.extraDay) notes.push('+1 day on site');
+  if (z.tier === 'platinum') notes.push('same day recoat, no extra day');
+  if (sp.floodL > 0) notes.push('clear flood epoxy ' + sp.floodL + ' L (' + PRICE.finish.floodLm2 + ' L/m² + ' + PRICE.finish.floodWastePct + '%)');
+  return '<div class="field"><label>Finish</label><div class="radio-group">' + FINISH_TIERS.map(pill).join('') + '</div>' +
+    (z.tier === 'platinum' ? '<div class="field" style="padding-left:8px;margin-top:6px;"><label>Polyaspartic Topcoat</label><select onchange="S.epoxyZones[' + i + '].platCoats=this.value;renderDetails();calcAll()">' +
+      '<option value="1"' + (z.platCoats === '1' ? ' selected' : '') + '>1 Coat · +$' + PRICE.fastcure['1'] + '/m²</option>' +
+      '<option value="2"' + (z.platCoats === '2' ? ' selected' : '') + '>2 Coats · +$' + PRICE.fastcure['2'] + '/m²</option></select></div>' : '') +
+    '<div class="text-muted" style="font-size:10px;margin-top:4px;">' + tierName(z.tier) + ': ' + PRICE.finishDesc[z.tier] + '</div>' +
+    (notes.length ? '<div class="info-box" style="font-size:10px;margin-top:6px;">🔒 Job sheet: ' + notes.join(' · ') + '</div>' : '') + '</div>';
+}
 // Walls on every coating. The rate starts at the system's floor rate and can be changed per zone.
 function zoneFloorRate(list, z) {
   if (list === 'epoxyZones') { let r = PRICE.epoxy[z.sys] || 85; if (z.sys !== 'Metallic Internal' && z.sys.indexOf('Solid Colour') !== 0) r += PRICE.flakeUp[z.flake] || 0; return r; }
@@ -1040,6 +1131,7 @@ function epoxySection() {
       '<div class="field"><label>Concrete Condition</label>' + pills(Object.keys(PRICE.conc), z.conc, 'setEZ_conc', i) + '</div>' +
       '<div class="field"><label>Existing Coating</label>' + pills(Object.keys(PRICE.coat), z.coat, 'setEZ_coat', i) + '</div>' +
       areaField('epoxyZones', i) +
+      tierField(i) +
       finishField('epoxyZones', i) +
       epoxyAddonsHTML(i) +
       '<div class="zone-total-line"><div class="zt-label">Zone Total</div><div class="zt-value" id="zt-epoxy-' + i + '">$0</div></div></div>';
@@ -1107,14 +1199,16 @@ function setTZ_prep(i,v){ S.tintedZones[i].prep=v; renderDetails(); calcAll(); }
 
 function sealSection() {
   let h = '<div class="card"><div class="card-header"><div class="card-title">💧 Cleaning &amp; Sealing <span class="badge" id="badge-seal">$0</span></div></div><div class="card-body">' +
-    '<div class="info-box" style="font-size:11px;">Clean and seal: same-day sealer $' + PRICE.seal['Same-Day Sealer'] + '/m² or premium next-day sealer $' + PRICE.seal['Premium Next-Day Sealer'] + '/m². No grind. Min charge applies per zone. <strong>Need surface prep too? Use the Grind &amp; Seal service.</strong></div>';
+    '<div class="info-box" style="font-size:11px;">Clean and seal: premium next-day sealer $' + PRICE.seal['Premium Next-Day Sealer'] + '/m²' + (showHidden() ? ', same-day sealer $' + PRICE.seal['Same-Day Sealer'] + '/m²' : '') + '. No grind. Min charge applies per zone. <strong>Need surface prep too? Use the Grind &amp; Seal service.</strong></div>' +
+    '<div class="toggle-row"><div class="toggle-label" style="font-size:12px;">Show hidden options</div><div class="toggle-price">Same-Day Sealer</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (showHidden() ? 'checked' : '') + ' onchange="setShowHidden(this.checked)"><span class="toggle-slider"></span></label></div>';
   S.sealZones.forEach(function(z, i) {
     var rate = PRICE.seal[z.type] || 20;
     var desc = PRICE.sealDesc[z.type] || '';
     var min = PRICE.sealMin[z.type] || 0;
     h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Zone ' + (i+1) + '</div><button class="btn-remove" onclick="rmZone(\'sealZones\',' + i + ')">✕</button></div>' +
       '<div class="field"><label>Zone Name</label><input type="text" data-bind="sealZones.' + i + '.name" placeholder="e.g. Patio"></div>' +
-      '<div class="field"><label>Sealer</label>' + pills(SEAL_TIERS.indexOf(z.type) > -1 ? SEAL_TIERS : SEAL_TIERS.concat([z.type]), z.type, 'setSZ_type', i) + '</div>' +
+      '<div class="field"><label>Sealer</label>' + pills(sealTierChoices(z), z.type, 'setSZ_type', i) + '</div>' +
       '<div class="info-box" style="font-size:10px;margin-bottom:10px;">' + desc + ' · <strong>$' + rate + '/m²</strong> · min $' + min + '</div>' +
       areaField('sealZones', i) +
       finishField('sealZones', i) + wallsBlock('sealZones', i) +
@@ -1255,10 +1349,10 @@ function careSection() {
 
 // New zone defaults, used by the tool and the sheet API
 function zoneDefaults(type) {
-  if (type === 'epoxy') return { name:'', sys:'Flake Internal', flake:'Standard', conc:'Hard', coat:'None', area:0, finish:'Gloss', walls:false, wallM2:0, wallRate:'',
+  if (type === 'epoxy') return { name:'', sys:'Flake Internal', flake:'Standard', conc:'Hard', coat:'None', area:0, finish:'Gloss', tier:'classic', platCoats:'1', walls:false, wallM2:0, wallRate:'',
     addons:{ nonslip:false, mvb:false, xtopcoat:false, fastcure:false, fastcureCoats:'2', turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' } };
   if (type === 'tinted') return { name:'', prep:'Pressure Wash', colour:'', coats:'2', area:0, finish:'Gloss', walls:false, wallM2:0, wallRate:'' };
-  if (type === 'seal') return { name:'', type:'Same-Day Sealer', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'', regrout:false, regroutSurface:'porcelain', regroutOption:'overtop', regroutM2:0 };
+  if (type === 'seal') return { name:'', type:'Premium Next-Day Sealer', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'', regrout:false, regroutSurface:'porcelain', regroutOption:'overtop', regroutM2:0 };
   if (type === 'gs') return { name:'', type:'Premium Grind & Seal', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'' };
   if (type === 'aqua') return { name:'', area:0, walls:false, wallM2:0, wallRate:'' };
   if (type === 'grind') return { name:'', type:'Light Surface Prep', area:0, mvb:false };
@@ -1298,14 +1392,15 @@ function epoxyAddonsHTML(i) {
   const open = ADDON_OPEN['epoxy-' + i] !== undefined ? ADDON_OPEN['epoxy-' + i] : epoxyAddonActive(z);
   return '<details class="addon-box"' + (open ? ' open' : '') + ' ontoggle="ADDON_OPEN[\'epoxy-' + i + '\']=this.open"><summary>➕ Add-ons for this zone</summary>' +
       wallsBlock('epoxyZones', i) +
-      tgl(i,'nonslip','Non-slip Aggregate','+$' + PRICE.addons.nonslip + '/m²',a.nonslip) +
+      (zoneTier(z) === 'blackLabel' ? '<div class="toggle-row"><div class="toggle-label" style="opacity:.5;">Non-slip Aggregate</div><div class="toggle-price">Not with ' + tierName('blackLabel') + '</div></div>'
+        : tgl(i,'nonslip','Non-slip Aggregate','+$' + PRICE.addons.nonslip + '/m²',a.nonslip)) +
       tgl(i,'mvb','Moisture Vapour Barrier (MVB)','+$' + PRICE.addons.mvb + '/m²',a.mvb) +
       tgl(i,'xtopcoat','Extra Topcoat (Smoothness)','+$' + PRICE.addons.xtopcoat + '/m²',a.xtopcoat) +
-      '<div class="toggle-row"><div class="toggle-label">Fast-Cure Polyaspartic Topcoat</div><div class="toggle-price">$20–40/m²</div>' +
+      (tierApplies(z) ? '' : '<div class="toggle-row"><div class="toggle-label">Fast-Cure Polyaspartic Topcoat</div><div class="toggle-price">$20–40/m²</div>' +
       '<label class="toggle-switch"><input type="checkbox" ' + (a.fastcure?'checked':'') + ' onchange="setA(' + i + ',\'fastcure\',this.checked)"><span class="toggle-slider"></span></label></div>' +
       (a.fastcure ? '<div class="field" style="padding-left:8px;"><label>Coats</label><select onchange="S.epoxyZones[' + i + '].addons.fastcureCoats=this.value;calcAll()">' +
         '<option value="1" ' + (a.fastcureCoats==='1'?'selected':'') + '>1 Coat — $20/m²</option>' +
-        '<option value="2" ' + (a.fastcureCoats==='2'?'selected':'') + '>2 Coats — $40/m² (recommended)</option></select></div>' : '') +
+        '<option value="2" ' + (a.fastcureCoats==='2'?'selected':'') + '>2 Coats — $40/m² (recommended)</option></select></div>' : '')) +
       '<div class="toggle-row"><div class="toggle-label">Turn-ups 100mm Wall</div><div class="toggle-price">$' + PRICE.addons.turnup + '/lm</div>' +
       '<label class="toggle-switch"><input type="checkbox" ' + (a.turnup?'checked':'') + ' onchange="setA(' + i + ',\'turnup\',this.checked)"><span class="toggle-slider"></span></label></div>' +
       (a.turnup ? '<div style="padding-left:8px;">' +
@@ -1347,8 +1442,8 @@ function generalAddonsCard() {
     gaTgl('nonslip','Non-slip Aggregate','+$' + PRICE.addons.nonslip + '/m²',g.nonslip) + (g.nonslip ? gaNum('nonslipM2','Non-slip Area (m²)') : '') +
     gaTgl('mvb','Moisture Vapour Barrier (MVB)','+$' + PRICE.addons.mvb + '/m²',g.mvb) + (g.mvb ? gaNum('mvbM2','MVB Area (m²)') : '') +
     gaTgl('xtopcoat','Extra Topcoat (Smoothness)','+$' + PRICE.addons.xtopcoat + '/m²',g.xtopcoat) + (g.xtopcoat ? gaNum('xtopcoatM2','Extra Topcoat Area (m²)') : '') +
-    '<div class="toggle-row"><div class="toggle-label">Fast-Cure Polyaspartic Topcoat</div><div class="toggle-price">$20–40/m²</div>' +
-    '<label class="toggle-switch"><input type="checkbox" ' + (g.fastcure?'checked':'') + ' onchange="S.generalAddons.fastcure=this.checked;renderJobAddons();calcAll()"><span class="toggle-slider"></span></label></div>' +
+    (!g.fastcure ? '' : '<div class="toggle-row"><div class="toggle-label">Fast-Cure Polyaspartic Topcoat (old, use the Platinum finish)</div><div class="toggle-price">$20–40/m²</div>' +
+    '<label class="toggle-switch"><input type="checkbox" ' + (g.fastcure?'checked':'') + ' onchange="S.generalAddons.fastcure=this.checked;renderJobAddons();calcAll()"><span class="toggle-slider"></span></label></div>') +
     (g.fastcure ? '<div class="field" style="padding-left:8px;"><label>Coats</label><select onchange="S.generalAddons.fastcureCoats=this.value;calcAll()">' +
       '<option value="1" ' + (g.fastcureCoats==='1'?'selected':'') + '>1 Coat — $20/m²</option>' +
       '<option value="2" ' + (g.fastcureCoats==='2'?'selected':'') + '>2 Coats — $40/m² (recommended)</option></select></div>' +
@@ -1614,20 +1709,22 @@ function cancerSection() {
 // ===== PRESSURE WASHING =====
 function pwTier() { return S.pwJob.oil ? 'Heavy' : S.pwJob.tier; }
 // Standard (chlorine) tier: the whole area at the bulk rate once the job is over the threshold
-function pwRateFor(tier, area) {
+function pwRateFor(tier) { return PRICE.pw[tier] || PRICE.pw['Standard']; }
+// Standard tier: the first pwBulk.over m² at the Standard rate, every m² beyond that at pwBulk.rate
+function pwBulkM2(tier, area) {
   const b = PRICE.pwBulk || {};
-  if (tier === 'Standard' && b.over > 0 && area > b.over && b.rate > 0) return b.rate;
-  return PRICE.pw[tier] || PRICE.pw['Standard'];
+  return (tier === 'Standard' && b.over > 0 && b.rate > 0 && area > b.over) ? r2(area - b.over) : 0;
 }
 function pwCalc() {
   let area = 0;
   S.pwZones.forEach(function(z){ area += (z.area||0); });
   const tier = pwTier();
-  const rate = pwRateFor(tier, area);
-  const byArea = area * rate;
+  const rate = pwRateFor(tier);
+  const bulkM2 = pwBulkM2(tier, area);
+  const byArea = (area - bulkM2) * rate + bulkM2 * (bulkM2 > 0 ? PRICE.pwBulk.rate : 0);
   const wash = area > 0 ? Math.max(byArea, PRICE.pwMin) : 0;
   const aqua = (S.pwJob.aqua && area > 0) ? area * PRICE.pwAqua : 0;
-  return { area:area, tier:tier, rate:rate, byArea:byArea, wash:wash, minApplied: area > 0 && byArea < PRICE.pwMin, aqua:aqua, total:wash + aqua };
+  return { area:area, tier:tier, rate:rate, bulkM2:bulkM2, byArea:byArea, wash:wash, minApplied: area > 0 && byArea < PRICE.pwMin, aqua:aqua, total:wash + aqua };
 }
 function setPwTier(i, v) { S.pwJob.tier = v; renderPw(); calcAll(); }
 function addPwZone() { S.pwZones.push(zoneDefaults('pw')); renderPw(); populateMeasureDest(); calcAll(); }
@@ -1657,9 +1754,13 @@ function pwSection() {
   const c = pwCalc();
   if (c.total <= 0) return null;
   const add = [];
-  S.pwZones.forEach(function(z,i) {
+  if (c.bulkM2 > 0) {
+    const first = r2(c.area - c.bulkM2);
+    add.push({ label:'First ' + first + 'm² @ $' + c.rate + '/m²', price:first*c.rate });
+    add.push({ label:'Next ' + c.bulkM2 + 'm² @ $' + PRICE.pwBulk.rate + '/m²', price:c.bulkM2*PRICE.pwBulk.rate });
+  } else S.pwZones.forEach(function(z,i) {
     if (!(z.area > 0)) return;
-    add.push({ label:(z.name||'Area '+(i+1)) + ' — ' + z.area + 'm² @ $' + c.rate + '/m²' + (c.rate !== PRICE.pw[c.tier] ? ' (over ' + PRICE.pwBulk.over + 'm² rate)' : ''), price:z.area*c.rate });
+    add.push({ label:(z.name||'Area '+(i+1)) + ' — ' + z.area + 'm² @ $' + c.rate + '/m²', price:z.area*c.rate });
   });
   if (c.minApplied) add.push({ label:'Minimum callout top-up ($' + PRICE.pwMin + ' min)', price:c.wash - c.byArea });
   if (c.aqua > 0) add.push({ label:'AquaSeal after wash — ' + c.area + 'm² @ $' + PRICE.pwAqua + '/m²', price:c.aqua });
@@ -1867,6 +1968,11 @@ function estimateDays() {
   add('Commercial system', 'comm', Math.round(comm*100)/100);
   add('Pressure washing', 'pw', sumArea('pwZones'));
   let days = parts.reduce(function(m, x){ return Math.max(m, x.days); }, 0);
+  const tierDay = (S.epoxyZones || []).filter(function(z){ return !isOnsiteZone(z) && tierSpec(z).extraDay; });
+  if (days > 0 && tierDay.length) {
+    days += 1;
+    parts.push({ label: tierDay.map(function(z){ return tierName(z.tier); }).filter(function(v, k, arr){ return arr.indexOf(v) === k; }).join(' and ') + ' finish extra coat', m2:0, days:1, extra:true });
+  }
   const d = S.demo || {};
   const heavyDemo = (parseFloat(d.tile)||0) + (parseFloat(d.tileMosaic)||0) + (parseFloat(d.vinyl)||0) + (parseFloat(d.kitchenArea)||0);
   if (heavyDemo > 20) { days += 1; parts.push({ label:'Tile, vinyl or kitchen removal first', m2:heavyDemo, days:1, extra:true }); }
@@ -2119,6 +2225,7 @@ function sendMeasureTo() {
 }
 // ===== CALC =====
 function epoxyZoneTotal(z) {
+  normalizeEpoxyZone(z);
   const area = z.area || 0;
   const a = z.addons;
   let rate = PRICE.epoxy[z.sys] || 85;
@@ -2126,7 +2233,8 @@ function epoxyZoneTotal(z) {
   rate += PRICE.conc[z.conc] || 0;
   rate += PRICE.coat[z.coat] || 0;
   let total = area * rate;
-  if (a.nonslip) total += area * PRICE.addons.nonslip;
+  const tl = tierLine(z); if (tl) total += tl.price;
+  if (a.nonslip && zoneTier(z) !== 'blackLabel') total += area * PRICE.addons.nonslip;
   if (a.mvb) total += area * PRICE.addons.mvb;
   if (a.xtopcoat) total += area * PRICE.addons.xtopcoat;
   if (a.fastcure) total += area * (PRICE.fastcure[a.fastcureCoats] || 40);
@@ -2143,10 +2251,12 @@ function epoxyZoneTotal(z) {
   return total;
 }
 function epoxyAddonsList(z) {
+  normalizeEpoxyZone(z);
   const area = z.area || 0; const a = z.addons; const list = [];
+  const tl = tierLine(z); if (tl) list.push(tl);
   if (PRICE.conc[z.conc] > 0) list.push({ label:'Soft Concrete + Densifier', price: area*PRICE.conc[z.conc] });
   if (PRICE.coat[z.coat] > 0) list.push({ label: z.coat + ' (Coating Removal)', price: area*PRICE.coat[z.coat] });
-  if (a.nonslip) list.push({ label:'Non-slip Aggregate', price: area*PRICE.addons.nonslip });
+  if (a.nonslip && zoneTier(z) !== 'blackLabel') list.push({ label:'Non-slip Aggregate', price: area*PRICE.addons.nonslip });
   if (a.mvb) list.push({ label:'Moisture Vapour Barrier', price: area*PRICE.addons.mvb });
   if (a.xtopcoat) list.push({ label:'Extra Topcoat (Smoothness)', price: area*PRICE.addons.xtopcoat });
   if (a.fastcure) list.push({ label:'Fast-Cure Polyaspartic (' + a.fastcureCoats + ' Coat' + (a.fastcureCoats==='2'?'s':'') + ')', price: area*(PRICE.fastcure[a.fastcureCoats]||40) });
@@ -2177,7 +2287,9 @@ function buildSectionsRaw() {
     let desc = z.sys;
     if (z.sys !== 'Metallic Internal' && z.sys.indexOf('Solid Colour') !== 0 && z.flake !== 'Standard') desc += ' — ' + z.flake;
     desc += ' · ' + (z.area || 0) + 'm²' + finishText(z) + ' · Diamond Grind Included';
-    sections.push({ key:'epoxy-'+i, category:'🪨 Epoxy Floor System', zoneName:z.name||('Zone '+(i+1)), desc:desc, addons:epoxyAddonsList(z), subtotal:epoxyZoneTotal(z) });
+    const t = zoneTier(z);
+    sections.push({ key:'epoxy-'+i, category:'🪨 Epoxy Floor System', zoneName:z.name||('Zone '+(i+1)), desc:desc, addons:epoxyAddonsList(z), subtotal:epoxyZoneTotal(z),
+      finish: t ? { tier:t, name:tierName(t), desc:PRICE.finishDesc[t] || '' } : null });
   });
   S.tintedZones.forEach(function(z,i) {
     if (!z.area && !wallM2(z)) return;
@@ -3082,6 +3194,7 @@ function scopeRowsHTML(sections, withPrices) {
     return '<tr class="zone-row"><td><span class="zone-cat">' + sec.category + '</span>' +
       (sec.zoneName ? '<span class="zone-name"> — ' + sec.zoneName + '</span>' : '') +
       (sec.desc ? '<br><span class="zone-desc">' + String(sec.desc).replace(/\n/g, '<br>') + '</span>' : '') +
+      (sec.finish ? '<br><span class="zone-desc" style="font-style:normal;color:#333;"><strong>' + sec.finish.name + ' finish:</strong> ' + sec.finish.desc + '</span>' : '') +
       (sec.qtyText ? '<br><span class="zone-desc">' + sec.qtyText + '</span>' : '') +
       (sec.warranty ? '<br><span class="zone-desc" style="font-style:normal;color:#0a8f8a;">' + sec.warranty + '</span>' : '') + '</td>' +
       '<td class="price-col zone-price">' + fmt(effSub(sec)) + '</td></tr>' + addonRows;
@@ -3941,7 +4054,7 @@ function renderLedger() {
 }
 
 // ===== Screen: Close (in person sales mode) =====
-let CLOSE = { step: 0, chosen: {} };
+let CLOSE = { step: 0, chosen: {}, prev: {} };
 function closeOfferList() {
   const m = quoteMoney(), o = offersState(), P = PRICE.offers;
   let run = m.jobEx; m.extras.forEach(function(x){ if (x.key !== 'bookNow') run += x.ex; });
@@ -3952,12 +4065,43 @@ function closeOfferList() {
   const lock = priceLockInfo();
   if (lock && lock.locked) list.push({ key:'priceLock', kind:'info', title:'Lock in ' + fmt(m.incGst) + ' until ' + lock.lockDate, sub:'After that, pricing may be reviewed until ' + lock.expiry + '.', amount: m.incGst });
   list.push({ key:'careCredit', kind:'discount', title:'Add a Care Plan and get ' + fmt(careCreditAmount()) + ' off', sub:'Care Plan sign up credit.', amount: careCreditAmount() });
+  blackLabelUpsells().forEach(function(u){ list.push(u); });
   list.push({ key:'priority', kind:'upgrade', title:'Priority start within ' + P.priorityDays + ' days: ' + fmt(priorityPrice(m.jobEx) * 1.1), sub:'Ahead of our standard booking queue.', amount: priorityPrice(m.jobEx) * 1.1 });
   list.push({ key:'warranty', kind:'upgrade', title:P.warrantyExtYears + ' year workmanship warranty: ' + fmt(warrantyPrice(m.jobEx) * 1.1), sub:'Or included free with our top Care Plan.', amount: warrantyPrice(m.jobEx) * 1.1 });
   return list.filter(function(x){ return x.kind !== 'discount' || x.amount > 0 || x.suggest; });
 }
+// Classic on an internal flake or quartz area: offer Black Label for that area at the price difference (inc GST)
+function blackLabelDiff(z, from) {
+  const a = JSON.parse(JSON.stringify(z)), b = JSON.parse(JSON.stringify(z));
+  a.tier = from ? from.tier : z.tier; a.addons.nonslip = from ? from.nonslip : z.addons.nonslip;
+  b.tier = 'blackLabel';
+  return r2(epoxyZoneTotal(b) - epoxyZoneTotal(a));
+}
+function blackLabelUpsells() {
+  const out = [];
+  (S.epoxyZones || []).forEach(function(z, i) {
+    const k = 'blackLabel-' + i, chosen = !!CLOSE.chosen[k];
+    if (!tierApplies(z) || !/Internal/.test(z.sys) || !(z.area > 0) || isOnsiteZone(z)) return;
+    if (!(z.tier === 'classic' || (chosen && z.tier === 'blackLabel'))) return;
+    const diff = blackLabelDiff(z, chosen ? CLOSE.prev[i] : null) * 1.1;
+    if (!(diff > 0)) return;
+    const d = String(PRICE.finishDesc.blackLabel || '');
+    out.push({ key:k, kind:'upgrade', zone:i, title:'Upgrade ' + (z.name || 'Zone ' + (i + 1)) + ' to ' + tierName('blackLabel') + ': +' + fmt(diff), sub: d.charAt(0).toUpperCase() + d.slice(1), amount: diff });
+  });
+  return out;
+}
+function toggleBlackLabel(k) {
+  const i = parseInt(k.split('-')[1], 10), z = S.epoxyZones[i];
+  if (!z) return;
+  CLOSE.prev = CLOSE.prev || {};
+  if (!CLOSE.chosen[k]) { CLOSE.prev[i] = { tier: z.tier, nonslip: !!z.addons.nonslip }; z.tier = 'blackLabel'; z.addons.nonslip = false; CLOSE.chosen[k] = true; }
+  else { const p = CLOSE.prev[i] || { tier:'classic', nonslip:false }; z.tier = p.tier; z.addons.nonslip = p.nonslip; CLOSE.chosen[k] = false; }
+  calcAll();
+  renderClose();
+}
 function closeChosenDiscounts() { return Object.keys(CLOSE.chosen).filter(function(k){ return CLOSE.chosen[k] && OFFER_NAMES[k]; }); }
 function toggleCloseOffer(k) {
+  if (/^blackLabel-\d+$/.test(k)) return toggleBlackLabel(k);
   if (!CLOSE.chosen[k] && OFFER_NAMES[k]) {
     const already = closeChosenDiscounts().length + requestedDiscounts().filter(function(x){ return !(x in CLOSE.chosen) && x !== 'onsite'; }).length;
     if (already >= PRICE.offers.maxOffers) { alert('Two offers maximum per job.'); return; }
@@ -4462,6 +4606,7 @@ function applyRestoredPayload(payload) {
     if (!S.lmLines) S.lmLines = [];
     if (!S.lmJob) S.lmJob = freshState().lmJob;
     if (!S.waste) S.waste = freshState().waste;
+    (S.epoxyZones || []).forEach(normalizeEpoxyZone);
     S.sealZones.forEach(function(z){ if (z.regrout === undefined) { z.regrout=false; z.regroutSurface='porcelain'; z.regroutOption='overtop'; z.regroutM2=0; } });
     measureShapes = payload.measureShapes || [];
   } else if (payload.client) {

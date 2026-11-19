@@ -244,7 +244,10 @@ function PXA_addAreas_(st, areas) {
       else z[k] = a[k];
     });
     // "system" / "tier" / "kind" name the product: sys for epoxy and commercial system, type for the rest
-    var sys = a.system !== undefined ? a.system : (a.tier !== undefined ? a.tier : a.kind);
+    var ft = type === 'epoxy' ? PXA_finishTier_(a.finishTier !== undefined ? a.finishTier : a.tier) : '';
+    if (ft) z.tier = ft;
+    if (type === 'epoxy' && a.platinumCoats !== undefined) z.platCoats = String(a.platinumCoats) === '2' ? '2' : '1';
+    var sys = a.system !== undefined ? a.system : (a.tier !== undefined && !ft ? a.tier : a.kind);
     if (sys !== undefined) {
       if (type === 'epoxy') z.sys = String(sys);
       else if (type === 'comm') z.system = String(sys);
@@ -254,6 +257,13 @@ function PXA_addAreas_(st, areas) {
     st[list].push(z);
     if (PXA.FLOOR_TYPES[type]) st.services[type] = true;
   });
+}
+
+// Epoxy finish tier from a key or name: classic, gold, platinum, blackLabel ("Black Label")
+function PXA_finishTier_(v) {
+  if (v === undefined || v === null) return '';
+  var k = String(v).toLowerCase().replace(/[^a-z]/g, '');
+  return { classic: 'classic', gold: 'gold', platinum: 'platinum', blacklabel: 'blackLabel' }[k] || '';
 }
 
 // Site and money bits shared by create and update
@@ -396,6 +406,11 @@ function PXA_prices_() {
   sh.getRange(2, 1, sh.getLastRow() - 1, PXA.PRICE_HEADERS.length).getValues().forEach(function (r) {
     var k = String(r[5]).trim(), v = r[3];
     if (!k || v === '' || v === null) return;
+    if (String(r[2]).trim() === 'text') {  // names and descriptions (e.g. epoxy finish names)
+      var t = String(v).replace(/\s+/g, ' ').trim();
+      if (t && t !== String(r[4]).trim()) map[k] = t;
+      return;
+    }
     var n = parseFloat(String(v).replace(/[$,\s]/g, ''));
     if (isFinite(n) && n >= 0 && n !== PXI_num_(r[4])) map[k] = n;
   });
@@ -406,6 +421,11 @@ function PXA_savePrices_(prices) {
   var rows = [];
   PXP.priceTable().forEach(function (g) {
     g.rows.forEach(function (r) {
+      if (r.text) {
+        var t = prices && prices[r.key] !== undefined && prices[r.key] !== null ? String(prices[r.key]).trim() : '';
+        rows.push([g.title, r.label, 'text', t || r.original, r.original, r.key]);
+        return;
+      }
       var v = prices && prices[r.key] !== undefined ? parseFloat(prices[r.key]) : NaN;
       rows.push([g.title, r.label, r.unit, isFinite(v) && v >= 0 ? v : r.original, r.original, r.key]);
     });

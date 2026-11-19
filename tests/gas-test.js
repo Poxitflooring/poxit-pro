@@ -139,7 +139,7 @@ function boot(opts) {
   ok(env.post({ action: 'savePrices', key: KEY, prices: { 'seal|Same-Day Sealer': 22 } }).status === 'ok', 'savePrices with the key');
   const gp = env.post({ action: 'getPrices' });
   ok(gp.status === 'ok' && gp.prices['seal|Same-Day Sealer'] === 22 && Object.keys(gp.prices).length === 1, 'getPrices returns only changed rates');
-  const r3 = env.post({ action: 'createQuote', key: KEY, client: { name: 'Seal Test', address: '1 A St', suburb: 'Upper Coomera', location: 'External' }, areas: [{ type: 'seal', area: 50 }] });
+  const r3 = env.post({ action: 'createQuote', key: KEY, client: { name: 'Seal Test', address: '1 A St', suburb: 'Upper Coomera', location: 'External' }, areas: [{ type: 'seal', system: 'Same-Day Sealer', area: 50 }] });
   ok(close(r3.lines[0].amount, 50 * 22), 'API uses the Price Table tab ($22 same-day) ' + r3.lines[0].amount);
   const pt = env.sheets['Price Table'];
   const rowIdx = pt.rows.findIndex(x => x[5] === 'seal|Same-Day Sealer');
@@ -329,6 +329,24 @@ function boot(opts) {
   ar_9.getRange(3, 1, 1, 2).setValues([['sendDraft', JSON.stringify({ draftId: qres_9.draftId })]]);
   env4_9.run('PXA_processApiRequests()');
   ok(ar_9.rows[2][2] === 'Done' && env4_9.mail.sent.length === 2, 'EMAIL sendDraft works through the API Requests tab');
+
+  // ===================== 20 NOV: finish tiers through the sheet API =====================
+  const env5 = boot(); env5.run('PXI_setup(); PXA_setup();'); const K5 = env5.props.PXA_API_KEY;
+  const t5 = env5.post({ action: 'createQuote', key: K5, client: { name: 'Tier Api', address: '1 B St', suburb: 'Upper Coomera', location: 'Internal' },
+    areas: [{ type: 'epoxy', name: 'Garage', area: 40, system: 'Flake Internal', finishTier: 'Black Label', addons: { nonslip: true } },
+            { type: 'epoxy', name: 'Hall', area: 20, system: 'Flake Internal', tier: 'platinum', platinumCoats: 2 }] });
+  const l5 = k => t5.lines.find(x => x.key === k);
+  ok(t5.status === 'ok' && close(l5('epoxy-0').amount, 40 * 140) && close(l5('epoxy-1').amount, 20 * 130), 'API finishTier: Black Label $140/m² (no non slip), Platinum 2 coats $130/m² ' + (t5.message || ''));
+  const st5 = JSON.parse(env5.sheets.Sheet1.rows[0][6]).state;
+  ok(st5.epoxyZones[0].sys === 'Flake Internal' && st5.epoxyZones[0].tier === 'blackLabel' && st5.epoxyZones[1].tier === 'platinum', 'API "tier" with a finish name sets the finish, not the system');
+  ok(env5.files[t5.fileId].data.indexOf('<strong>Black Label finish:</strong> our flagship.') > -1, 'API quote PDF shows the finish line');
+  ok(env5.post({ action: 'savePrices', key: K5, prices: { 'finishName|blackLabel': 'Black Label Reserve', 'finish|blackLabel': 55 } }).status === 'ok', 'savePrices takes a finish name');
+  const pt5 = env5.sheets['Price Table'].rows.find(r => r[5] === 'finishName|blackLabel');
+  ok(pt5 && pt5[2] === 'text' && pt5[3] === 'Black Label Reserve', 'Price Table tab keeps the name as text');
+  const gp5 = env5.post({ action: 'getPrices' }).prices;
+  ok(gp5['finishName|blackLabel'] === 'Black Label Reserve' && gp5['finish|blackLabel'] === 55, 'getPrices returns the name and the rate');
+  const rg5 = env5.post({ action: 'regeneratePdf', key: K5, ref: t5.ref });
+  ok(env5.files[rg5.fileId].data.indexOf('<strong>Black Label Reserve finish:</strong>') > -1 && close(rg5.lines.find(x => x.key === 'epoxy-0').amount, 40 * 145), 'regenerated PDF uses the sheet name and rate');
 
   // ---- no email anywhere except sendDraft
   const allGs = ['PoxitPricing.gs', 'PoxitInvoicing.gs', 'PoxitApi.gs'].map(x => fs.readFileSync(path.join(ROOT, 'apps-script', x), 'utf8')).join('\n');
