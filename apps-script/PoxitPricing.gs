@@ -2,7 +2,7 @@
 //  POXIT PRICING  (file: PoxitPricing.gs)
 //  GENERATED from the quote tool (index.html) by tools/build-pricing.js.
 //  Do not edit by hand: paste the new version whenever the tool's pricing changes.
-//  Pricing version: cc4376271be3
+//  Pricing version: 77b62aadce0a
 // =====================================================================
 var PXP = (function () {
   // No screen on the server: anything that would touch it is never called here
@@ -105,6 +105,11 @@ const PRICE = {
   shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 },
   cancer: { rate:1800, min:450, rebar:150 },
   skim: 20, skimMin: 400,
+  // Sanding and topcoat: sand back an existing coated floor and recoat it
+  sandtop: { 'UV Topcoat':30, 'Polyaspartic Topcoat':45 }, sandtopMin: 500,
+  sandtopSecond: { 'UV Topcoat':15, 'Polyaspartic Topcoat':20 },
+  // Post fit out check: come back after the other trades, walk the floor, photos, touch ups
+  fitout: { visit:250, hourly:200 },
   pw: { 'Basic':5, 'Standard':8, 'Heavy':15 },
   pwDesc: { 'Basic':'Plain water, no product', 'Standard':'Liquid chlorine, dwell time, no scrubbing', 'Heavy':'Degrease' },
   pwMin: 250, pwAqua: 10,
@@ -146,6 +151,12 @@ function priceTableSpec() {
     { path:['addons','xtopcoat'], label:'Extra topcoat', unit:'$/m²' }, { path:['addons','turnup'], label:'Turn-ups 100mm', unit:'$/lm' },
     { path:['addons','silicone'], label:'Silicone bead', unit:'$/lm' }, { path:['addons','coving'], label:'Coving (standard)', unit:'$/lm' },
     { path:['addons','border'], label:'Border / banding', unit:'$/lm' } ] });
+  g.push({ title:'Sanding and topcoat', note:'Sand back an existing coated floor and recoat it. Minimum applies to the whole job.', rows: [
+    { path:['sandtop','UV Topcoat'], label:'Sand + UV topcoat', unit:'$/m²' }, { path:['sandtop','Polyaspartic Topcoat'], label:'Sand + polyaspartic topcoat', unit:'$/m²' },
+    { path:['sandtopSecond','UV Topcoat'], label:'Second UV topcoat', unit:'$/m²' }, { path:['sandtopSecond','Polyaspartic Topcoat'], label:'Second polyaspartic topcoat', unit:'$/m²' },
+    { path:['sandtopMin'], label:'Sanding and topcoat minimum', unit:'$' } ] });
+  g.push({ title:'Post fit out check', note:'Visit fee covers the walkthrough, dated photos and the first hour of touch ups.', rows: [
+    { path:['fitout','visit'], label:'Visit (includes first hour)', unit:'$' }, { path:['fitout','hourly'], label:'Extra touch ups', unit:'$/hr' } ] });
   g.push({ title:'Epoxy finish (flake and quartz)', note:'Uplift per m² on top of the zone rate. Names and descriptions print on the quote. Fast cure polyaspartic is the Platinum finish (Metallic and Solid Colour zones still have it as an add-on).', rows: [
     { path:['finish','classic'], label:'Classic', unit:'$/m²' }, { path:['finish','gold'], label:'Gold (extra build coat, +1 day)', unit:'$/m²' },
     { path:['fastcure','1'], label:'Platinum, 1 coat polyaspartic topcoat', unit:'$/m²' }, { path:['fastcure','2'], label:'Platinum, 2 coats polyaspartic topcoat', unit:'$/m²' },
@@ -235,13 +246,15 @@ const SERVICES = [
   { key:'polished', icon:'✨', name:'Polished Concrete', rate:'Mechanical polish — $120/m²' },
   { key:'care',     icon:'♻️', name:'Care Plan Refresh', rate:'Existing care plan clients' },
   { key:'shine',    icon:'🧽', name:'Clean Grip & Shine', rate:'Standard $15/m² · Premium post-buff $20/m²' },
+  { key:'sandtop',  icon:'🔁', name:'Sanding &amp; Topcoat', rate:'Sand back + new topcoat · UV $30/m² · Polyaspartic $45/m²' },
 ];
 function freshState() {
   return {
     client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', jobType:'Domestic', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     docService: '',
-    epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
+    epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [], sandtopZones: [],
+    fitout: { trades:false, on:false, hours:0 },
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
     spallingCem: { small:0, med:0, large:0 },
@@ -370,6 +383,14 @@ function regroutLabel(z) {
   const opt = (z.regroutOption === 'grindout') ? 'grind out & regrout' : 'grout over top';
   return 'Regrouting — ' + surf + ', ' + opt + ' (' + z.regroutM2 + 'm²)';
 }
+function sandtopLines(z) {
+  const area = parseFloat(z.area) || 0, list = [];
+  if (!(area > 0)) return { base:0, list:list };
+  if (z.second) list.push({ label:'Second ' + (z.top === 'Polyaspartic Topcoat' ? 'polyaspartic' : 'UV') + ' topcoat (' + area + 'm² @ $' + PRICE.sandtopSecond[z.top] + '/m²)', price: area * (PRICE.sandtopSecond[z.top] || 0) });
+  if (z.nonslip) list.push({ label:'Non-slip Aggregate', price: area * PRICE.addons.nonslip });
+  if (z.pwFirst) list.push({ label:'Pressure clean first (' + area + 'm² @ $' + PRICE.pw['Standard'] + '/m²)', price: area * PRICE.pw['Standard'] });
+  return { base: area * (PRICE.sandtop[z.top] || PRICE.sandtop['UV Topcoat']), list:list };
+}
 function zoneDefaults(type) {
   if (type === 'epoxy') return { name:'', sys:'Flake Internal', flake:'Standard', conc:'Hard', coat:'None', area:0, finish:'Gloss', tier:'classic', platCoats:'1', walls:false, wallM2:0, wallRate:'',
     addons:{ nonslip:false, mvb:false, xtopcoat:false, fastcure:false, fastcureCoats:'2', turnup:false, turnupLm:0, silicone:false, silicLm:0, coving:false, covingLm:0, border:false, borderLm:0, logo:false, logoType:'150', stencil:false, stencilM2:0, stencilDiff:'25' } };
@@ -377,6 +398,7 @@ function zoneDefaults(type) {
   if (type === 'seal') return { name:'', type:'Premium Next-Day Sealer', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'', regrout:false, regroutSurface:'porcelain', regroutOption:'overtop', regroutM2:0 };
   if (type === 'gs') return { name:'', type:'Premium Grind & Seal', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'' };
   if (type === 'aqua') return { name:'', area:0, walls:false, wallM2:0, wallRate:'' };
+  if (type === 'sandtop') return { name:'', area:0, top:'UV Topcoat', finish:'Gloss', second:false, nonslip:false, pwFirst:false };
   if (type === 'grind') return { name:'', type:'Light Surface Prep', area:0, mvb:false };
   if (type === 'polished') return { name:'', gloss:'Satin', area:0 };
   if (type === 'care') return { name:'', type:'Level 2 Refresh Coat', area:0, nonslip:false };
@@ -385,7 +407,23 @@ function zoneDefaults(type) {
   if (type === 'comm') return { name:'', system:'Hychem Premium', floor:0, wall:0, coving:0, joints:0, jointType:'Hyflex NS', routing:false, qty:1 };
   return null;
 }
-const ZONE_LISTS = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', pw:'pwZones', comm:'commAreas' };
+const ZONE_LISTS = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', sandtop:'sandtopZones', pw:'pwZones', comm:'commAreas' };
+function fitoutPrice() { const f = S.fitout || {}; return f.on ? PRICE.fitout.visit + (parseFloat(f.hours) || 0) * PRICE.fitout.hourly : 0; }
+function fitoutSection() {
+  const f = S.fitout || {};
+  if (!f.on) return null;
+  const h = parseFloat(f.hours) || 0, add = [{ label:'Return visit, walkthrough, dated photos and the first hour of touch ups', price: PRICE.fitout.visit }];
+  if (h > 0) add.push({ label:'Extra touch ups (' + h + ' hr @ $' + PRICE.fitout.hourly + '/hr)', price: h * PRICE.fitout.hourly });
+  return { key:'fitout', category:'🏗 Post Fit Out Check', zoneName:'',
+    desc:'Once the other trades have finished we come back, walk the floor with you and touch up any marks so it is handed over looking brand new. Any further touch ups are $' + PRICE.fitout.hourly + ' per hour.',
+    addons:add, subtotal: fitoutPrice() };
+}
+function fitoutTermsHTML() {
+  const f = S.fitout || {};
+  if (!f.trades) return '';
+  return '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-bottom:6px;"><strong>Other trades:</strong> our workmanship warranty covers our work, not damage caused by other trades after we hand over the floor. Floor protection (such as Ram Board) is to be laid by the builder or client before other trades start. ' +
+    (f.on ? 'Your Post Fit Out Check is booked: once the trades are done we come back and touch up any marks.' : 'Add a Post Fit Out Check and we come back once the trades are done to touch up any marks.') + '</p>';
+}
 function generalAddonsList() {
   const g = S.generalAddons; const list = [];
   if (g.nonslip && g.nonslipM2 > 0) list.push({ label:'Non-slip Aggregate (' + g.nonslipM2 + 'm²)', price: g.nonslipM2*PRICE.addons.nonslip });
@@ -559,7 +597,7 @@ function autoFlags() {
 }
 const DAY_RULES = {
   epoxy:[2,80], metallic:[3,60], solidNoTop:[1,80], tinted:[1,100], sealSame:[1,150], sealNext:[2,150],
-  gs:[2,80], grind:[1,80], polished:[3,60], aqua:[1,200], care:[1,100], shine:[1,150], comm:[3,60], pw:[1,300]
+  gs:[2,80], grind:[1,80], polished:[3,60], aqua:[1,200], care:[1,100], shine:[1,150], sandtop:[1,150], comm:[3,60], pw:[1,300]
 };
 function daysFor(rule, m2) {
   if (!(m2 > 0)) return 0;
@@ -586,6 +624,7 @@ function estimateDays() {
   add('AquaSeal', 'aqua', sumArea('aquaZones'));
   add('Care plan refresh', 'care', sumArea('careZones'));
   add('Grip & shine', 'shine', sumArea('shineZones'));
+  add('Sanding and topcoat', 'sandtop', sumArea('sandtopZones'));
   let comm = 0; (S.commAreas || []).forEach(function(c){ comm += (commNum(c.floor) + commNum(c.wall)) * commQty(c); });
   add('Commercial system', 'comm', Math.round(comm*100)/100);
   add('Pressure washing', 'pw', sumArea('pwZones'));
@@ -746,6 +785,23 @@ function buildSectionsRaw() {
     var wa = wallAddon('aquaZones', z);
     sections.push({ key:'aqua-'+i, category:'🌧 AquaSeal Penetrating Sealer', zoneName:z.name||('Zone '+(i+1)), desc:area + 'm²', addons:wa ? [wa] : [], subtotal:area*PRICE.aqua + (wa?wa.price:0) });
   });
+  (function(){
+    const st = [];
+    (S.sandtopZones || []).forEach(function(z,i) {
+      const L = sandtopLines(z);
+      if (!(L.base > 0)) return;
+      const area = parseFloat(z.area) || 0;
+      st.push({ key:'sandtop-'+i, category:'🔁 Sanding &amp; Topcoat', zoneName:z.name||('Zone '+(i+1)),
+        desc: area + 'm² · ' + (z.top === 'Polyaspartic Topcoat' ? 'Existing floor machine sanded and cleaned, then recoated with a fast curing polyaspartic topcoat' : 'Existing floor machine sanded and cleaned, then recoated with a fresh UV stable topcoat') + finishText(z),
+        addons:L.list, subtotal: L.base + L.list.reduce(function(t,x){ return t + x.price; }, 0) });
+    });
+    const tot = st.reduce(function(t,x){ return t + x.subtotal; }, 0);
+    if (st.length && tot < PRICE.sandtopMin) {
+      st[0].addons = st[0].addons.concat([{ label:'Minimum job charge ($' + PRICE.sandtopMin + ')', price: PRICE.sandtopMin - tot }]);
+      st[0].subtotal += PRICE.sandtopMin - tot;
+    }
+    st.forEach(function(x){ sections.push(x); });
+  })();
   let gSub = 0; const gAdd = [];
   S.grindZones.forEach(function(z,i) {
     if (!z.area) return;
@@ -864,6 +920,7 @@ function buildSectionsRaw() {
   wasteSections().forEach(function(s){ sections.push(s); });
   const pwSec = pwSection(); if (pwSec) sections.push(pwSec);
   const lmSec = lmSection(); if (lmSec) sections.push(lmSec);
+  const foSec = fitoutSection(); if (foSec) sections.push(foSec);
   const gaList = generalAddonsList();
   if (gaList.length > 0) {
     const gaSub = gaList.reduce(function(s,x){ return s + x.price; }, 0);
@@ -1294,8 +1351,8 @@ function offersState() {
   Object.keys(f).forEach(function(k){ if (S.offers[k] === undefined) S.offers[k] = f[k]; });
   return S.offers;
 }
-const ONSITE_LISTS = ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','grindZones','aquaZones'];
-const ONSITE_TYPES = { epoxyZones:'epoxy', tintedZones:'tinted', sealZones:'seal', gsZones:'gs', polishedZones:'polished', grindZones:'grind', aquaZones:'aqua' };
+const ONSITE_LISTS = ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','grindZones','aquaZones','sandtopZones'];
+const ONSITE_TYPES = { epoxyZones:'epoxy', tintedZones:'tinted', sealZones:'seal', gsZones:'gs', polishedZones:'polished', grindZones:'grind', aquaZones:'aqua', sandtopZones:'sandtop' };
 function isOnsiteZone(z) { return !!(z && z.onsite && z.onsite.vid); }
 function onsiteZones() {
   const out = [];
@@ -1335,7 +1392,7 @@ function warrantyText() {
 }
 function coatingFloorM2() {
   let t = 0;
-  ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','aquaZones'].forEach(function(l) {
+  ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','aquaZones','sandtopZones'].forEach(function(l) {
     (S[l] || []).forEach(function(z){ if (!isOnsiteZone(z)) t += parseFloat(z.area) || 0; });
   });
   (S.commAreas || []).forEach(function(c){ t += commNum(c.floor) * commQty(c); });
@@ -1348,10 +1405,10 @@ function careBasicPrice(m2) {
   return tiers[tiers.length - 1].price;
 }
 function careCreditAmount() { return careBasicPrice(coatingFloorM2()); }
-const WARRANTY_KEY_RE = /^(epoxy|tinted|seal|gs|aqua|polished|care|shine|comm)-\d+$/;
+const WARRANTY_KEY_RE = /^(epoxy|tinted|seal|gs|aqua|polished|care|shine|sandtop|comm)-\d+$/;
 function lineName(sec) { return String(sec.zoneName || sec.category || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/^[^A-Za-z0-9]+/, '').trim(); }
 function bundleLines(sections) {
-  const elig = sections.filter(function(x){ return subOfKey(x.key) !== 'site' && x.key !== 'coatingMin' && effSub(x) > 0; });
+  const elig = sections.filter(function(x){ return subOfKey(x.key) !== 'site' && x.key !== 'coatingMin' && x.key !== 'fitout' && effSub(x) > 0; });
   return elig.slice(1).map(function(x) {
     return { key:'bundle-' + x.key, kind:'discount', offer:'bundle', label:'Bundle discount: ' + PRICE.offers.bundlePct + '% off ' + lineName(x), ex: -r2(effSub(x) * PRICE.offers.bundlePct / 100) };
   });
@@ -1438,6 +1495,7 @@ function upgradesDocHTML(m) {
   };
   return '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Warranty &amp; Booking</span></div>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-bottom:6px;">Every system on this quote includes a <strong>' + P.warrantyStdYears + ' year workmanship warranty</strong>. Your warranty: <strong>' + warrantyText() + '</strong>.</p>' +
+    fitoutTermsHTML() +
     '<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">' +
     row(o.warranty === 'extended', 'Extend to ' + P.warrantyExtYears + ' year workmanship warranty', '+' + fmt(warrantyPrice(m.jobEx)) + ' ex GST') +
     row(o.warranty === 'careplan', 'Or get the ' + P.warrantyExtYears + ' year warranty included with our top Care Plan (includes a maintenance topcoat)', '') +
@@ -1600,7 +1658,7 @@ function docJobLabel() {
 function docAreaLabel() {
   const a = (S.client.area || '').trim();
   if (a) return a;
-  const arrs = ['epoxyZones','tintedZones','sealZones','gsZones','grindZones','polishedZones','careZones','shineZones','aquaZones'];
+  const arrs = ['epoxyZones','tintedZones','sealZones','gsZones','grindZones','polishedZones','careZones','shineZones','aquaZones','sandtopZones'];
   for (let i = 0; i < arrs.length; i++) {
     const z = (S[arrs[i]] || []).find(function(x){ return x && x.name && x.name.trim(); });
     if (z) return z.name.trim();
@@ -1681,6 +1739,8 @@ function applyRestoredPayload(payload) {
     if (PRICE.pwPlanPay.indexOf(S.pwPlan.pay) < 0) S.pwPlan.pay = 'Client Chooses';
     if (!PRICE.pwPlan[S.pwPlan.freq]) S.pwPlan.freq = 'Six Monthly';
     if (!S.skim) S.skim = freshState().skim;
+    if (!S.sandtopZones) S.sandtopZones = [];
+    if (!S.fitout) S.fitout = freshState().fitout;
     if (!S.lmLines) S.lmLines = [];
     if (!S.lmJob) S.lmJob = freshState().lmJob;
     if (!S.waste) S.waste = freshState().waste;
@@ -1748,6 +1808,6 @@ function stampQuoteDates() {
     applyPriceOverrides({});
     return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, text: !!r.text, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });
   }
-  return { version: 'cc4376271be3', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
+  return { version: '77b62aadce0a', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
            setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };
 })();

@@ -62,3 +62,8 @@ Every create, update and regenerate returns `ref`, `key`, `totals` (exGst, gst, 
 ## Epoxy finish tiers (20 Nov 2026)
 
 Flake and quartz epoxy areas take a finish: `"finishTier": "classic" | "gold" | "platinum" | "blackLabel"` (names like "Black Label" work too, and so does `"tier"` when it holds a finish name). Platinum takes `"platinumCoats": 1 | 2`. The uplift adds to the area's rate (Classic $0, Gold $15, Platinum $20 or $40, Black Label $50 per m²); Black Label drops non slip. Old quotes with the fast cure add-on on a flake or quartz area open as Platinum. Finish names and descriptions are text rows in the Price Table tab (unit "text") and print on the quote. New seal areas default to Premium Next-Day Sealer.
+
+## Sanding and topcoat, post fit out check (21 Nov 2026)
+
+- Area type `sandtop`: `{ "type": "sandtop", "area": 40, "system": "UV" | "polyaspartic", "finish": "Gloss", "second": true, "nonslip": false, "pwFirst": false }`. UV $30/m², polyaspartic $45/m², second coat $15 or $20/m², non slip $10/m², pressure clean first $8/m², $500 minimum across the job.
+- Post fit out check lives in `state.fitout`: `{ "trades": true, "on": true, "hours": 0 }`. `trades` adds the other trades and floor protection terms; `on` adds the $250 visit (first hour included) plus `hours` at $200/hr. Never gets the bundle discount.

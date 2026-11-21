@@ -1123,5 +1123,33 @@ setTimeout(async ()=>{try{
  ok(run("SERVICES.find(function(x){return x.key==='seal';}).rate").indexOf('Same-day')<0,'SEAL service tile no longer advertises same-day');
  run("S.pwJob=freshState().pwJob; S.pwJob.tier='Standard'; S.pwZones=[{name:'Drive',area:180}]; calcAll();"); ok(Math.abs(run("pwCalc().total")-(800+80*6))<0.001,'PW Standard 180m² = 100 @ $8 + 80 @ $6 = $1,280');
  run("confirmReset(false);");
+ // ===================== 21 NOV: sanding and topcoat, post fit out check =====================
+ run("confirmReset(false); S.client.first='Sand'; S.client.last='Test'; S.client.location='Internal'; S.client.date=fmtAUDate(new Date()); showTab('services'); showSub('floors'); S.services.sandtop=true; addZone('sandtop'); var z=S.sandtopZones[0]; z.name='Garage'; z.area=40; renderDetails(); calcAll();");
+ var st=function(i){ return JSON.parse(sec('sandtop-'+(i||0))); };
+ ok(run("SERVICES.some(function(x){return x.key==='sandtop';})") && run("document.getElementById('detailsContainer').innerHTML").indexOf('Sanding &amp; Topcoat')>-1,'SANDTOP service tile and card');
+ ok(Math.abs(st().subtotal-1200)<0.001 && /UV stable topcoat · Gloss finish/.test(st().desc),'SANDTOP 40m² sand + UV topcoat @ $30 = $1,200');
+ run("setST(0,'top','Polyaspartic Topcoat')"); ok(Math.abs(st().subtotal-1800)<0.001 && /polyaspartic/.test(st().desc),'SANDTOP polyaspartic @ $45 = $1,800');
+ run("setST(0,'second',true); setST(0,'nonslip',true); setST(0,'pwFirst',true);");
+ ok(Math.abs(st().subtotal-(1800+800+400+320))<0.001 && st().addons.length===3,'SANDTOP second coat $20, non slip $10, pressure clean first $8 per m² stack ($3,320)');
+ run("setST(0,'top','UV Topcoat')"); ok(st().addons[0].label==='Second UV topcoat (40m² @ $15/m²)','SANDTOP second UV coat at $15');
+ run("S.sandtopZones[0]=zoneDefaults('sandtop'); S.sandtopZones[0].area=10; calcAll();"); ok(Math.abs(st().subtotal-500)<0.001 && st().addons.some(function(a){return /Minimum job charge/.test(a.label);}),'SANDTOP small job lifts to the $500 minimum');
+ run("addZone('sandtop'); S.sandtopZones[1].area=10; calcAll();"); ok(Math.abs(st(0).subtotal+st(1).subtotal-600)<0.001,'SANDTOP minimum is for the whole job, not each zone');
+ ok(run("estimateDays().parts.some(function(p){return p.label==='Sanding and topcoat';})"),'SANDTOP counts toward days on site');
+ ok(run("buildSections().some(function(x){return x.key==='coatingMin';})")===false,'SANDTOP does not trigger the $1,800 small coating minimum');
+ // post fit out check
+ run("S.sandtopZones=[]; S.services.sandtop=false; S.services.epoxy=true; addZone('epoxy'); S.epoxyZones[0].name='Living'; S.epoxyZones[0].area=50; renderAddons(); calcAll();");
+ var ah=run("document.getElementById('addonsContainer').innerHTML");
+ ok(ah.indexOf('Other trades still to come')>-1 && ah.indexOf('Post Fit Out Check')<0,'FITOUT card asks about other trades first');
+ run("setFitout('trades',true)"); ok(run("document.getElementById('addonsContainer').innerHTML").indexOf('Post Fit Out Check')>-1 && sec('fitout')==='null','FITOUT check offered once trades follow, nothing charged yet');
+ run("generatePDF()"); var fd=run("window.__doc");
+ ok(fd.indexOf('not damage caused by other trades')>-1 && fd.indexOf('Ram Board')>-1 && fd.indexOf('Add a Post Fit Out Check')>-1,'FITOUT terms: other trade damage not covered, floor protection, check offered');
+ run("setFitout('on',true)"); var fo=JSON.parse(sec('fitout'));
+ ok(fo && Math.abs(fo.subtotal-250)<0.001 && /dated photos and the first hour/.test(fo.addons[0].label),'FITOUT $250 visit includes the first hour');
+ run("S.fitout.hours=2; calcAll();"); ok(Math.abs(JSON.parse(sec('fitout')).subtotal-650)<0.001,'FITOUT 2 extra hours @ $200 = $650');
+ ok(!run("JSON.stringify(bundleLines(buildSections()))").includes('fitout') ,'FITOUT never gets the bundle discount');
+ run("generatePDF()"); fd=run("window.__doc"); ok(fd.indexOf('Post Fit Out Check')>-1 && fd.indexOf('Your Post Fit Out Check is booked')>-1 && !/[‐-―]/.test(fd.split('Post Fit Out Check')[1].slice(0,600)),'FITOUT on the quote with booked wording');
+ run("setFitout('trades',false)"); ok(sec('fitout')==='null' && run("S.fitout.on")===false,'FITOUT switching trades off removes the check');
+ run("var st2=JSON.parse(JSON.stringify(S)); delete st2.sandtopZones; delete st2.fitout; restoreQuote({state:st2,measureShapes:[]});"); ok(Array.isArray(run("S.sandtopZones")) && run("S.fitout.trades")===false,'OLD QUOTE opens with the new fields filled in');
+ run("closeDocOverlay(); confirmReset(false);");
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

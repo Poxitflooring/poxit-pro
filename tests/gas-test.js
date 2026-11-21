@@ -348,6 +348,10 @@ function boot(opts) {
   const rg5 = env5.post({ action: 'regeneratePdf', key: K5, ref: t5.ref });
   ok(env5.files[rg5.fileId].data.indexOf('<strong>Black Label Reserve finish:</strong>') > -1 && close(rg5.lines.find(x => x.key === 'epoxy-0').amount, 40 * 145), 'regenerated PDF uses the sheet name and rate');
 
+  const t6 = env5.post({ action: 'createQuote', key: K5, client: { name: 'Sand Api', address: '2 C St', suburb: 'Upper Coomera', location: 'Internal' },
+    areas: [{ type: 'sandtop', name: 'Garage', area: 40, system: 'polyaspartic', second: true }] });
+  ok(t6.status === 'ok' && close(t6.lines.find(x => x.key === 'sandtop-0').amount, 40 * 65), 'API sandtop: polyaspartic $45 + second coat $20 per m² ' + (t6.message || ''));
+
   // ---- no email anywhere except sendDraft
   const allGs = ['PoxitPricing.gs', 'PoxitInvoicing.gs', 'PoxitApi.gs'].map(x => fs.readFileSync(path.join(ROOT, 'apps-script', x), 'utf8')).join('\n');
   ok(!/MailApp\s*\.|sendEmail\s*\(/.test(allGs), 'no MailApp or sendEmail anywhere');

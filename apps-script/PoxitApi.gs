@@ -42,7 +42,7 @@ var PXA = {
   STATUS_COL: 18,          // Sheet1 column R: Quoted / Accepted / Declined / Invoiced / Paid (free text)
   ACTIONS: { createQuote: 1, getQuoteByRef: 1, listQuotes: 1, updateQuote: 1, regeneratePdf: 1,
              draftEmail: 1, sendDraft: 1, renumberInvoice: 1, showInvoiceNumbers: 1, setNextInvoiceNo: 1 },
-  FLOOR_TYPES: { epoxy: 1, tinted: 1, seal: 1, gs: 1, aqua: 1, grind: 1, polished: 1, care: 1, shine: 1 }
+  FLOOR_TYPES: { epoxy: 1, tinted: 1, seal: 1, gs: 1, aqua: 1, grind: 1, polished: 1, care: 1, shine: 1, sandtop: 1 }
 };
 
 function PXA_handles_(a) { return a === 'nextQuoteRef' || a === 'getPrices' || a === 'savePrices' || !!PXA.ACTIONS[a]; }
@@ -252,6 +252,7 @@ function PXA_addAreas_(st, areas) {
       if (type === 'epoxy') z.sys = String(sys);
       else if (type === 'comm') z.system = String(sys);
       else if (type === 'shine') z.tier = String(sys);
+      else if (type === 'sandtop') z.top = /poly/i.test(String(sys)) ? 'Polyaspartic Topcoat' : 'UV Topcoat';
       else if ('type' in z) z.type = String(sys);
     }
     st[list].push(z);

@@ -605,6 +605,11 @@ const PRICE = {
   shine: { 'Standard — Clean, Apply & Light Buff':15, 'Premium — Clean, Apply & Full Machine Post-Buff':20 },
   cancer: { rate:1800, min:450, rebar:150 },
   skim: 20, skimMin: 400,
+  // Sanding and topcoat: sand back an existing coated floor and recoat it
+  sandtop: { 'UV Topcoat':30, 'Polyaspartic Topcoat':45 }, sandtopMin: 500,
+  sandtopSecond: { 'UV Topcoat':15, 'Polyaspartic Topcoat':20 },
+  // Post fit out check: come back after the other trades, walk the floor, photos, touch ups
+  fitout: { visit:250, hourly:200 },
   pw: { 'Basic':5, 'Standard':8, 'Heavy':15 },
   pwDesc: { 'Basic':'Plain water, no product', 'Standard':'Liquid chlorine, dwell time, no scrubbing', 'Heavy':'Degrease' },
   pwMin: 250, pwAqua: 10,
@@ -649,6 +654,12 @@ function priceTableSpec() {
     { path:['addons','xtopcoat'], label:'Extra topcoat', unit:'$/m²' }, { path:['addons','turnup'], label:'Turn-ups 100mm', unit:'$/lm' },
     { path:['addons','silicone'], label:'Silicone bead', unit:'$/lm' }, { path:['addons','coving'], label:'Coving (standard)', unit:'$/lm' },
     { path:['addons','border'], label:'Border / banding', unit:'$/lm' } ] });
+  g.push({ title:'Sanding and topcoat', note:'Sand back an existing coated floor and recoat it. Minimum applies to the whole job.', rows: [
+    { path:['sandtop','UV Topcoat'], label:'Sand + UV topcoat', unit:'$/m²' }, { path:['sandtop','Polyaspartic Topcoat'], label:'Sand + polyaspartic topcoat', unit:'$/m²' },
+    { path:['sandtopSecond','UV Topcoat'], label:'Second UV topcoat', unit:'$/m²' }, { path:['sandtopSecond','Polyaspartic Topcoat'], label:'Second polyaspartic topcoat', unit:'$/m²' },
+    { path:['sandtopMin'], label:'Sanding and topcoat minimum', unit:'$' } ] });
+  g.push({ title:'Post fit out check', note:'Visit fee covers the walkthrough, dated photos and the first hour of touch ups.', rows: [
+    { path:['fitout','visit'], label:'Visit (includes first hour)', unit:'$' }, { path:['fitout','hourly'], label:'Extra touch ups', unit:'$/hr' } ] });
   g.push({ title:'Epoxy finish (flake and quartz)', note:'Uplift per m² on top of the zone rate. Names and descriptions print on the quote. Fast cure polyaspartic is the Platinum finish (Metallic and Solid Colour zones still have it as an add-on).', rows: [
     { path:['finish','classic'], label:'Classic', unit:'$/m²' }, { path:['finish','gold'], label:'Gold (extra build coat, +1 day)', unit:'$/m²' },
     { path:['fastcure','1'], label:'Platinum, 1 coat polyaspartic topcoat', unit:'$/m²' }, { path:['fastcure','2'], label:'Platinum, 2 coats polyaspartic topcoat', unit:'$/m²' },
@@ -807,13 +818,15 @@ const SERVICES = [
   { key:'polished', icon:'✨', name:'Polished Concrete', rate:'Mechanical polish — $120/m²' },
   { key:'care',     icon:'♻️', name:'Care Plan Refresh', rate:'Existing care plan clients' },
   { key:'shine',    icon:'🧽', name:'Clean Grip & Shine', rate:'Standard $15/m² · Premium post-buff $20/m²' },
+  { key:'sandtop',  icon:'🔁', name:'Sanding &amp; Topcoat', rate:'Sand back + new topcoat · UV $30/m² · Polyaspartic $45/m²' },
 ];
 function freshState() {
   return {
     client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', jobType:'Domestic', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
     services: {},
     docService: '',
-    epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [],
+    epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [], sandtopZones: [],
+    fitout: { trades:false, on:false, hours:0 },
     grindExtras: { trip:0, lip:0 },
     cracks: [], spalling: { small:0, med:0, large:0, area:0 },
     spallingCem: { small:0, med:0, large:0 },
@@ -1116,6 +1129,7 @@ function renderDetails() {
     if (s.key === 'polished') html += polishedSection();
     if (s.key === 'care') html += careSection();
     if (s.key === 'shine') html += shineSection();
+    if (s.key === 'sandtop') html += sandtopSection();
   });
   c.innerHTML = html;
   syncBoundInputs();
@@ -1277,6 +1291,39 @@ function gsSection() {
 }
 function setGSZ_type(i,v){ S.gsZones[i].type=v; renderDetails(); calcAll(); }
 
+const SANDTOP_TYPES = ['UV Topcoat','Polyaspartic Topcoat'];
+function setST(i, k, v) { S.sandtopZones[i][k] = v; renderDetails(); calcAll(); }
+function sandtopSection() {
+  let h = '<div class="card"><div class="card-header"><div class="card-title">🔁 Sanding &amp; Topcoat <span class="badge" id="badge-sandtop">$0</span></div></div><div class="card-body">' +
+    '<div class="info-box" style="font-size:11px;">Existing coated floor: machine sand, vacuum and clean, then a new topcoat. UV $' + PRICE.sandtop['UV Topcoat'] + '/m² · Polyaspartic $' + PRICE.sandtop['Polyaspartic Topcoat'] + '/m² · $' + PRICE.sandtopMin + ' minimum for the job.</div>';
+  S.sandtopZones.forEach(function(z, i) {
+    const tg = function(k, label, price) {
+      return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price">' + price + '</div>' +
+        '<label class="toggle-switch"><input type="checkbox" ' + (z[k] ? 'checked' : '') + ' onchange="setST(' + i + ',\'' + k + '\',this.checked)"><span class="toggle-slider"></span></label></div>';
+    };
+    h += '<div class="zone-box"><div class="zone-box-head"><div class="zone-box-title">Zone ' + (i+1) + '</div><button class="btn-remove" onclick="rmZone(\'sandtopZones\',' + i + ')">✕</button></div>' +
+      '<div class="row"><div class="field"><label>Zone Name</label><input type="text" data-bind="sandtopZones.' + i + '.name" placeholder="e.g. Garage"></div>' +
+      areaField('sandtopZones', i) + '</div>' +
+      '<div class="field"><label>Topcoat</label><div class="radio-group">' + SANDTOP_TYPES.map(function(t) {
+        return '<div class="radio-pill ' + (z.top === t ? 'selected' : '') + '" onclick="setST(' + i + ',\'top\',\'' + t + '\')">' + t + ' <span style="opacity:.6;font-size:10px;">$' + PRICE.sandtop[t] + '</span></div>';
+      }).join('') + '</div></div>' +
+      finishField('sandtopZones', i) +
+      tg('second', 'Second topcoat', '+$' + (PRICE.sandtopSecond[z.top] || 0) + '/m²') +
+      tg('nonslip', 'Non-slip Aggregate', '+$' + PRICE.addons.nonslip + '/m²') +
+      tg('pwFirst', 'Pressure clean first', '+$' + PRICE.pw['Standard'] + '/m²') +
+      '<div class="zone-total-line"><div class="zt-label">Zone Total</div><div class="zt-value" id="zt-sandtop-' + i + '">$0</div></div></div>';
+  });
+  h += '<button class="btn-add" onclick="addZone(\'sandtop\')">＋ Add Sanding &amp; Topcoat Zone</button></div></div>';
+  return h;
+}
+function sandtopLines(z) {
+  const area = parseFloat(z.area) || 0, list = [];
+  if (!(area > 0)) return { base:0, list:list };
+  if (z.second) list.push({ label:'Second ' + (z.top === 'Polyaspartic Topcoat' ? 'polyaspartic' : 'UV') + ' topcoat (' + area + 'm² @ $' + PRICE.sandtopSecond[z.top] + '/m²)', price: area * (PRICE.sandtopSecond[z.top] || 0) });
+  if (z.nonslip) list.push({ label:'Non-slip Aggregate', price: area * PRICE.addons.nonslip });
+  if (z.pwFirst) list.push({ label:'Pressure clean first (' + area + 'm² @ $' + PRICE.pw['Standard'] + '/m²)', price: area * PRICE.pw['Standard'] });
+  return { base: area * (PRICE.sandtop[z.top] || PRICE.sandtop['UV Topcoat']), list:list };
+}
 function aquaSection() {
   let h = '<div class="card"><div class="card-header"><div class="card-title">🌧 AquaSeal <span class="badge" id="badge-aqua">$0</span></div></div><div class="card-body"><div class="info-box" style="font-size:11px;">Penetrating sealer, spray-on. $20/m².</div>';
   S.aquaZones.forEach(function(z, i) {
@@ -1355,6 +1402,7 @@ function zoneDefaults(type) {
   if (type === 'seal') return { name:'', type:'Premium Next-Day Sealer', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'', regrout:false, regroutSurface:'porcelain', regroutOption:'overtop', regroutM2:0 };
   if (type === 'gs') return { name:'', type:'Premium Grind & Seal', area:0, finish:'Matte', walls:false, wallM2:0, wallRate:'' };
   if (type === 'aqua') return { name:'', area:0, walls:false, wallM2:0, wallRate:'' };
+  if (type === 'sandtop') return { name:'', area:0, top:'UV Topcoat', finish:'Gloss', second:false, nonslip:false, pwFirst:false };
   if (type === 'grind') return { name:'', type:'Light Surface Prep', area:0, mvb:false };
   if (type === 'polished') return { name:'', gloss:'Satin', area:0 };
   if (type === 'care') return { name:'', type:'Level 2 Refresh Coat', area:0, nonslip:false };
@@ -1363,7 +1411,7 @@ function zoneDefaults(type) {
   if (type === 'comm') return { name:'', system:'Hychem Premium', floor:0, wall:0, coving:0, joints:0, jointType:'Hyflex NS', routing:false, qty:1 };
   return null;
 }
-const ZONE_LISTS = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', pw:'pwZones', comm:'commAreas' };
+const ZONE_LISTS = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', sandtop:'sandtopZones', pw:'pwZones', comm:'commAreas' };
 function addZone(type) {
   if (type === 'pw') { S.pwZones.push(zoneDefaults('pw')); renderPw(); }
   else if (ZONE_LISTS[type] && type !== 'comm') S[ZONE_LISTS[type]].push(zoneDefaults(type));
@@ -1376,7 +1424,7 @@ function renderAddons() { renderDetails(); renderJobAddons(); }
 // Job-wide add-ons (Floors panel), house and roof wash upsells (Pressure Wash panel), waste (Site step)
 function renderJobAddons() {
   const c = document.getElementById('addonsContainer');
-  if (c) c.innerHTML = generalAddonsCard();
+  if (c) c.innerHTML = fitoutCard() + generalAddonsCard();
   const pw = document.getElementById('pwExtrasContainer');
   if (pw) pw.innerHTML = pwUpsellCard() + roofWashCard();
   const w = document.getElementById('wasteContainer');
@@ -1464,6 +1512,38 @@ function generalAddonsCard() {
       Object.keys(PRICE.stencil).map(function(v){ return '<option value="' + v + '" ' + (g.stencilDiff===v?'selected':'') + '>' + PRICE.stencil[v] + '</option>'; }).join('') + '</select></div></div>' : '') +
     '</details></div></div>';
   return h;
+}
+// ---- Post fit out check: for jobs where we coat before the other trades are finished
+function setFitout(k, v) { S.fitout[k] = v; if (k === 'trades' && !v) S.fitout.on = false; renderJobAddons(); calcAll(); }
+function fitoutPrice() { const f = S.fitout || {}; return f.on ? PRICE.fitout.visit + (parseFloat(f.hours) || 0) * PRICE.fitout.hourly : 0; }
+function fitoutCard() {
+  const f = S.fitout || (S.fitout = freshState().fitout);
+  const tg = function(k, label, price) {
+    return '<div class="toggle-row"><div class="toggle-label">' + label + '</div><div class="toggle-price">' + price + '</div>' +
+      '<label class="toggle-switch"><input type="checkbox" ' + (f[k] ? 'checked' : '') + ' onchange="setFitout(\'' + k + '\',this.checked)"><span class="toggle-slider"></span></label></div>';
+  };
+  return '<div class="card"><div class="card-header"><div class="card-title">🏗 Other Trades After Us <span class="badge" id="badge-fitout">$0</span></div></div><div class="card-body">' +
+    tg('trades', 'Other trades still to come after we finish', '') +
+    (f.trades ? '<div class="text-muted" style="font-size:10px;margin:2px 0 8px;">Adds to the quote terms: damage by other trades is not covered by our warranty, and the builder or client lays floor protection (e.g. Ram Board) before trades start.</div>' +
+      tg('on', 'Post Fit Out Check', '$' + PRICE.fitout.visit + ' incl. 1st hr') +
+      (f.on ? '<div class="field" style="padding-left:8px;"><label>Extra touch up hours (beyond the first)</label><input type="number" value="' + (f.hours || 0) + '" step="0.5" min="0" oninput="S.fitout.hours=parseFloat(this.value)||0;calcAll()"></div>' +
+        '<div class="info-box" style="font-size:10px;">🔒 On handover day take dated photos of the finished floor before any trade walks on it.</div>' : '') : '') +
+    '</div></div>';
+}
+function fitoutSection() {
+  const f = S.fitout || {};
+  if (!f.on) return null;
+  const h = parseFloat(f.hours) || 0, add = [{ label:'Return visit, walkthrough, dated photos and the first hour of touch ups', price: PRICE.fitout.visit }];
+  if (h > 0) add.push({ label:'Extra touch ups (' + h + ' hr @ $' + PRICE.fitout.hourly + '/hr)', price: h * PRICE.fitout.hourly });
+  return { key:'fitout', category:'🏗 Post Fit Out Check', zoneName:'',
+    desc:'Once the other trades have finished we come back, walk the floor with you and touch up any marks so it is handed over looking brand new. Any further touch ups are $' + PRICE.fitout.hourly + ' per hour.',
+    addons:add, subtotal: fitoutPrice() };
+}
+function fitoutTermsHTML() {
+  const f = S.fitout || {};
+  if (!f.trades) return '';
+  return '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-bottom:6px;"><strong>Other trades:</strong> our workmanship warranty covers our work, not damage caused by other trades after we hand over the floor. Floor protection (such as Ram Board) is to be laid by the builder or client before other trades start. ' +
+    (f.on ? 'Your Post Fit Out Check is booked: once the trades are done we come back and touch up any marks.' : 'Add a Post Fit Out Check and we come back once the trades are done to touch up any marks.') + '</p>';
 }
 function generalAddonsList() {
   const g = S.generalAddons; const list = [];
@@ -1937,7 +2017,7 @@ function autoFlags() {
 // Days a 2 to 3 person crew needs: [days for the first block of m², m² per extra day]
 const DAY_RULES = {
   epoxy:[2,80], metallic:[3,60], solidNoTop:[1,80], tinted:[1,100], sealSame:[1,150], sealNext:[2,150],
-  gs:[2,80], grind:[1,80], polished:[3,60], aqua:[1,200], care:[1,100], shine:[1,150], comm:[3,60], pw:[1,300]
+  gs:[2,80], grind:[1,80], polished:[3,60], aqua:[1,200], care:[1,100], shine:[1,150], sandtop:[1,150], comm:[3,60], pw:[1,300]
 };
 function daysFor(rule, m2) {
   if (!(m2 > 0)) return 0;
@@ -1964,6 +2044,7 @@ function estimateDays() {
   add('AquaSeal', 'aqua', sumArea('aquaZones'));
   add('Care plan refresh', 'care', sumArea('careZones'));
   add('Grip & shine', 'shine', sumArea('shineZones'));
+  add('Sanding and topcoat', 'sandtop', sumArea('sandtopZones'));
   let comm = 0; (S.commAreas || []).forEach(function(c){ comm += (commNum(c.floor) + commNum(c.wall)) * commQty(c); });
   add('Commercial system', 'comm', Math.round(comm*100)/100);
   add('Pressure washing', 'pw', sumArea('pwZones'));
@@ -2175,7 +2256,8 @@ function populateMeasureDest() {
     { key:'grind',    list:'grindZones',    icon:'⚙️', label:'Grind' },
     { key:'polished', list:'polishedZones', icon:'✨', label:'Polished' },
     { key:'care',     list:'careZones',     icon:'♻️', label:'Care' },
-    { key:'shine',    list:'shineZones',    icon:'🧽', label:'Clean Grip & Shine' }
+    { key:'shine',    list:'shineZones',    icon:'🧽', label:'Clean Grip & Shine' },
+    { key:'sandtop',  list:'sandtopZones',  icon:'🔁', label:'Sanding & Topcoat' }
   ];
   map.forEach(function(m){
     if (!S.services[m.key]) return;
@@ -2210,7 +2292,7 @@ function sendMeasureTo() {
   if (dest.indexOf('NEW:') === 0) {
     const key = dest.split(':')[1];
     addZone(key);
-    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', pw:'pwZones' }[key];
+    const listName = { epoxy:'epoxyZones', tinted:'tintedZones', seal:'sealZones', gs:'gsZones', aqua:'aquaZones', grind:'grindZones', polished:'polishedZones', care:'careZones', shine:'shineZones', sandtop:'sandtopZones', pw:'pwZones' }[key];
     dest = listName + '.' + (S[listName].length - 1) + '.area';
   }
   setPath(S, dest, parseFloat(total.toFixed(2)));
@@ -2327,6 +2409,23 @@ function buildSectionsRaw() {
     var wa = wallAddon('aquaZones', z);
     sections.push({ key:'aqua-'+i, category:'🌧 AquaSeal Penetrating Sealer', zoneName:z.name||('Zone '+(i+1)), desc:area + 'm²', addons:wa ? [wa] : [], subtotal:area*PRICE.aqua + (wa?wa.price:0) });
   });
+  (function(){
+    const st = [];
+    (S.sandtopZones || []).forEach(function(z,i) {
+      const L = sandtopLines(z);
+      if (!(L.base > 0)) return;
+      const area = parseFloat(z.area) || 0;
+      st.push({ key:'sandtop-'+i, category:'🔁 Sanding &amp; Topcoat', zoneName:z.name||('Zone '+(i+1)),
+        desc: area + 'm² · ' + (z.top === 'Polyaspartic Topcoat' ? 'Existing floor machine sanded and cleaned, then recoated with a fast curing polyaspartic topcoat' : 'Existing floor machine sanded and cleaned, then recoated with a fresh UV stable topcoat') + finishText(z),
+        addons:L.list, subtotal: L.base + L.list.reduce(function(t,x){ return t + x.price; }, 0) });
+    });
+    const tot = st.reduce(function(t,x){ return t + x.subtotal; }, 0);
+    if (st.length && tot < PRICE.sandtopMin) {
+      st[0].addons = st[0].addons.concat([{ label:'Minimum job charge ($' + PRICE.sandtopMin + ')', price: PRICE.sandtopMin - tot }]);
+      st[0].subtotal += PRICE.sandtopMin - tot;
+    }
+    st.forEach(function(x){ sections.push(x); });
+  })();
   let gSub = 0; const gAdd = [];
   S.grindZones.forEach(function(z,i) {
     if (!z.area) return;
@@ -2445,6 +2544,7 @@ function buildSectionsRaw() {
   wasteSections().forEach(function(s){ sections.push(s); });
   const pwSec = pwSection(); if (pwSec) sections.push(pwSec);
   const lmSec = lmSection(); if (lmSec) sections.push(lmSec);
+  const foSec = fitoutSection(); if (foSec) sections.push(foSec);
   const gaList = generalAddonsList();
   if (gaList.length > 0) {
     const gaSub = gaList.reduce(function(s,x){ return s + x.price; }, 0);
@@ -2885,7 +2985,7 @@ function calcAll() {
   const incGst = finalTotal + gst;
 
   const secByKey = {}; sections.forEach(function(x){ secByKey[x.key] = x; });
-  ['epoxy','tinted','seal','gs','aqua','polished','care','shine'].forEach(function(t) {
+  ['epoxy','tinted','seal','gs','aqua','polished','care','shine','sandtop'].forEach(function(t) {
     (S[t + 'Zones'] || []).forEach(function(z, i) {
       const el = document.getElementById('zt-' + t + '-' + i);
       if (el) el.textContent = '$' + Math.round(secByKey[t + '-' + i] ? secByKey[t + '-' + i].subtotal : 0).toLocaleString();
@@ -2900,6 +3000,8 @@ function calcAll() {
   badge('badge-seal', sumKeys('seal-'));
   badge('badge-gs', sumKeys('gs-'));
   badge('badge-aqua', sumKeys('aqua-'));
+  badge('badge-sandtop', sumKeys('sandtop-'));
+  badge('badge-fitout', sumKeys('fitout'));
   badge('badge-grind', sumKeys('grind'));
   badge('badge-polished', sumKeys('polished-'));
   badge('badge-care', sumKeys('care-'));
@@ -3540,8 +3642,8 @@ function offersState() {
 const OFFER_NAMES = { bundle:'Bundle discount', careCredit:'Care Plan sign up credit', bookNow:'Book today', onsite:'On site add-on', earlyPay:'Early payment' };
 // Discounts and credits that count toward the two-offer limit, in the order they get a slot
 const OFFER_ORDER = ['bundle','careCredit','bookNow','onsite','earlyPay'];
-const ONSITE_LISTS = ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','grindZones','aquaZones'];
-const ONSITE_TYPES = { epoxyZones:'epoxy', tintedZones:'tinted', sealZones:'seal', gsZones:'gs', polishedZones:'polished', grindZones:'grind', aquaZones:'aqua' };
+const ONSITE_LISTS = ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','grindZones','aquaZones','sandtopZones'];
+const ONSITE_TYPES = { epoxyZones:'epoxy', tintedZones:'tinted', sealZones:'seal', gsZones:'gs', polishedZones:'polished', grindZones:'grind', aquaZones:'aqua', sandtopZones:'sandtop' };
 function isOnsiteZone(z) { return !!(z && z.onsite && z.onsite.vid); }
 function onsiteZones() {
   const out = [];
@@ -3589,7 +3691,7 @@ function warrantyText() {
 // Floor area of the coatings on the quote (for the Care Plan credit)
 function coatingFloorM2() {
   let t = 0;
-  ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','aquaZones'].forEach(function(l) {
+  ['epoxyZones','tintedZones','sealZones','gsZones','polishedZones','aquaZones','sandtopZones'].forEach(function(l) {
     (S[l] || []).forEach(function(z){ if (!isOnsiteZone(z)) t += parseFloat(z.area) || 0; });
   });
   (S.commAreas || []).forEach(function(c){ t += commNum(c.floor) * commQty(c); });
@@ -3602,11 +3704,11 @@ function careBasicPrice(m2) {
   return tiers[tiers.length - 1].price;
 }
 function careCreditAmount() { return careBasicPrice(coatingFloorM2()); }
-const WARRANTY_KEY_RE = /^(epoxy|tinted|seal|gs|aqua|polished|care|shine|comm)-\d+$/;
+const WARRANTY_KEY_RE = /^(epoxy|tinted|seal|gs|aqua|polished|care|shine|sandtop|comm)-\d+$/;
 function lineName(sec) { return String(sec.zoneName || sec.category || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/^[^A-Za-z0-9]+/, '').trim(); }
 // Bundle: the first area or service is full price, every one after it gets the bundle %
 function bundleLines(sections) {
-  const elig = sections.filter(function(x){ return subOfKey(x.key) !== 'site' && x.key !== 'coatingMin' && effSub(x) > 0; });
+  const elig = sections.filter(function(x){ return subOfKey(x.key) !== 'site' && x.key !== 'coatingMin' && x.key !== 'fitout' && effSub(x) > 0; });
   return elig.slice(1).map(function(x) {
     return { key:'bundle-' + x.key, kind:'discount', offer:'bundle', label:'Bundle discount: ' + PRICE.offers.bundlePct + '% off ' + lineName(x), ex: -r2(effSub(x) * PRICE.offers.bundlePct / 100) };
   });
@@ -3701,6 +3803,7 @@ function upgradesDocHTML(m) {
   };
   return '<div class="section-heading"><span class="section-num">4.</span><span class="section-title">Warranty &amp; Booking</span></div>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;margin-bottom:6px;">Every system on this quote includes a <strong>' + P.warrantyStdYears + ' year workmanship warranty</strong>. Your warranty: <strong>' + warrantyText() + '</strong>.</p>' +
+    fitoutTermsHTML() +
     '<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">' +
     row(o.warranty === 'extended', 'Extend to ' + P.warrantyExtYears + ' year workmanship warranty', '+' + fmt(warrantyPrice(m.jobEx)) + ' ex GST') +
     row(o.warranty === 'careplan', 'Or get the ' + P.warrantyExtYears + ' year warranty included with our top Care Plan (includes a maintenance topcoat)', '') +
@@ -4224,7 +4327,7 @@ function renderDocName() {
 function docAreaLabel() {
   const a = (S.client.area || '').trim();
   if (a) return a;
-  const arrs = ['epoxyZones','tintedZones','sealZones','gsZones','grindZones','polishedZones','careZones','shineZones','aquaZones'];
+  const arrs = ['epoxyZones','tintedZones','sealZones','gsZones','grindZones','polishedZones','careZones','shineZones','aquaZones','sandtopZones'];
   for (let i = 0; i < arrs.length; i++) {
     const z = (S[arrs[i]] || []).find(function(x){ return x && x.name && x.name.trim(); });
     if (z) return z.name.trim();
@@ -4603,6 +4706,8 @@ function applyRestoredPayload(payload) {
     if (PRICE.pwPlanPay.indexOf(S.pwPlan.pay) < 0) S.pwPlan.pay = 'Client Chooses';
     if (!PRICE.pwPlan[S.pwPlan.freq]) S.pwPlan.freq = 'Six Monthly';
     if (!S.skim) S.skim = freshState().skim;
+    if (!S.sandtopZones) S.sandtopZones = [];
+    if (!S.fitout) S.fitout = freshState().fitout;
     if (!S.lmLines) S.lmLines = [];
     if (!S.lmJob) S.lmJob = freshState().lmJob;
     if (!S.waste) S.waste = freshState().waste;
