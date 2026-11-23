@@ -2,7 +2,7 @@
 //  POXIT PRICING  (file: PoxitPricing.gs)
 //  GENERATED from the quote tool (index.html) by tools/build-pricing.js.
 //  Do not edit by hand: paste the new version whenever the tool's pricing changes.
-//  Pricing version: 77b62aadce0a
+//  Pricing version: 8171ffd78251
 // =====================================================================
 var PXP = (function () {
   // No screen on the server: anything that would touch it is never called here
@@ -59,7 +59,7 @@ const PRICE = {
   // Offers, upgrades and deposits (all editable in the Price Table)
   offers: { warrantyStdYears:1, warrantyExtYears:5, warrantyPct:10, warrantyCap:0,
             priorityPct:5, priorityMin:250, priorityMax:1500, priorityDays:7,
-            bundlePct:10, onsitePct:15, bookNowPct:2, priceLockDays:7, maxOffers:2,
+            bundlePct:10, onsitePct:15, bookNowPct:2, priceLockDays:14, maxOffers:2,
             earlyPct:3, earlyMin:3000, depositCommercialPct:50,
             domTier1Max:3300, domTier1Pct:20, domTier2Max:19999, domTier2Pct:10, domTier3Pct:5 },
   // Basic Care Plan price by floor size (the Care Plan sign up credit)
@@ -85,7 +85,7 @@ const PRICE = {
   },
   commJoint: { 'Hyflex NS':35, 'Hyflex FC':25 },
   commRouting: 8,
-  demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, cabinetry:60 },
+  demo: { carpet:15, laminate:28, vinyl:40, tile:45, tileMosaic:60, tileDouble:70, cabinetry:60 },
   kitchenStrip: [ {max:6, price:1200}, {max:10, price:2800}, {max:Infinity, price:4800} ],
   pwUpsell: {
     single: { '2':400, '3':480, '4':560, '5':650 },
@@ -250,7 +250,7 @@ const SERVICES = [
 ];
 function freshState() {
   return {
-    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', jobType:'Domestic', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'' },
+    client: { first:'', last:'', phone:'', email:'', address:'', suburb:'', location:'', entity:'Company', jobType:'Domestic', area:'', date:'', valid:'', ref:'', internalNotes:'', clientNotes:'', businessName:'', abn:'', customDeposit:'', priorityMode:'commence', addendum:false },
     services: {},
     docService: '',
     epoxyZones: [], tintedZones: [], sealZones: [], gsZones: [], aquaZones: [], grindZones: [], polishedZones: [], careZones: [], shineZones: [], sandtopZones: [],
@@ -271,7 +271,7 @@ function freshState() {
     pwPlan: { enabled:false, area:0, freq:'Six Monthly', tier:'Standard', reward:true, pay:'Client Chooses', showQuote:false, showInvoice:false },
     lmLines: [], lmJob: { material:'Epoxy', remark:false },
     waste: { enabled:false, m2:0, tier:'Medium', runFee:true, runs:1 },
-    demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, kitchenArea:0, cabinetryLm:0 },
+    demo: { carpet:0, laminate:0, vinyl:0, tile:0, tileMosaic:0, tileDouble:0, clientSkip:false, kitchenArea:0, cabinetryLm:0 },
     pwUpsell: { enabled:false, beds:'3', doubleStorey:false, diffAccess:false },
     roofWash: { enabled:false, beds:'3', doubleStorey:false },
     coatingMinOn: true,
@@ -909,6 +909,11 @@ function buildSectionsRaw() {
   if (d.vinyl > 0) { const p = d.vinyl*PRICE.demo.vinyl; dSub += p; dAdd.push({label:'Glued Vinyl Removal — ' + d.vinyl + 'm²', price:p}); }
   if (d.tile > 0) { const p = d.tile*PRICE.demo.tile; dSub += p; dAdd.push({label:'Tile Removal, Standard/Large (Glued) — ' + d.tile + 'm²', price:p}); }
   if (d.tileMosaic > 0) { const p = d.tileMosaic*PRICE.demo.tileMosaic; dSub += p; dAdd.push({label:'Tile Removal, Mosaic/Small (Glued) — ' + d.tileMosaic + 'm²', price:p}); }
+  if (d.tileDouble > 0) { const p = d.tileDouble*PRICE.demo.tileDouble; dSub += p; dAdd.push({label:'Tile Removal, Double Layer (Two tile beds, Glued) — ' + d.tileDouble + 'm²', price:p}); }
+  if (d.clientSkip) {
+    const tileArea = (d.tile||0) + (d.tileMosaic||0) + (d.tileDouble||0);
+    if (tileArea > 0) { const p = -tileArea * 10; dSub += p; dAdd.push({label:'Client Supplies Skip (tile area ' + tileArea + 'm²)', price:p}); }
+  }
   if (d.kitchenArea > 0) {
     const bracket = PRICE.kitchenStrip.find(function(b){ return d.kitchenArea <= b.max; });
     const p = bracket ? bracket.price : 0;
@@ -1239,7 +1244,7 @@ const COMPANY = {
   director:    'Dominic Amsteins',
   directorTitle: 'Director',
   phone:       '0478 495 995',
-  email:       'poxitflooring@gmail.com',
+  email:       'dominic@poxitflooring.com.au',
   web:         'www.poxitflooring.com.au',
   bankAccountName: 'Poxit Flooring Pty Ltd',
   bankBSB:     '067 873',
@@ -1255,7 +1260,7 @@ const SOLE_TRADER = {
   director:    'Dominic Amsteins',
   directorTitle: 'Sole Trader',
   phone:       '0478 495 995',
-  email:       'poxitflooring@gmail.com',
+  email:       'dominic@poxitflooring.com.au',
   web:         'www.poxitflooring.com.au',
   bankAccountName: 'Poxit Flooring',
   bankBSB:     '067 873',
@@ -1338,9 +1343,75 @@ function quoteDocHtml() {
     (c.clientNotes ? '<div class="section-heading"><span class="section-num">5.</span><span class="section-title">Notes</span></div><div class="notes-box">' + c.clientNotes.replace(/\n/g,'<br>') + '</div>' : '') +
     (S.custom.carePromo ? '<div class="payment-box" style="margin-top:16px;"><div class="payment-title">Protect Your New Floor — Poxit Care Plan</div><p style="font-size:11.5px;line-height:1.7;color:#333;">Keep your floor protected and looking brand new with a Poxit Care Plan — scheduled professional maintenance visits, priority booking, and member-only rates. Ask your Poxit specialist for details or reply to this quote to find out more.</p></div>' : '') +
     commSpecDocHTML() +
+    (c.addendum ? '<div class="disclaimer" style="margin-top:14px;border-left:3px solid #0ABAB5;padding-left:10px;">Addendum attached: any addendum provided alongside this document forms part of this contract and, to the extent of any inconsistency, prevails over these terms.</div>' : '') +
+    (isDomestic() ? '<div class="disclaimer" style="margin-top:14px;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;padding:10px;font-size:11px;line-height:1.6;"><strong>Cooling-Off Period (Domestic Building Work):</strong> Under the Queensland Building and Construction Commission Act 1991, you have a 5-business-day cooling-off period after signing this contract. If you cancel within this period you must do so in writing and no work will commence during this time. A cancellation fee of up to $100 or 0.2% of the contract price (whichever is greater) may apply if you cancel.</div>' : '') +
     '</div>' + docFooter() +
+    workContractHTML(money, c) +
     '<scr' + 'ipt>window.onload = function(){ window.print(); };</scr' + 'ipt></body></html>';
   return html;
+}
+function workContractHTML(money, c) {
+  const E = docEntity();
+  const client = (c.first + ' ' + c.last).trim() || '—';
+  const incGst = money.incGst;
+  const dep = money.deposit;
+  const depLine = dep.custom
+    ? 'A deposit of <strong>' + fmt(dep.amount) + ' (inc GST)</strong> is required to confirm booking.'
+    : 'A deposit of <strong>' + dep.pct + '% (' + fmt(dep.amount) + ' inc GST)</strong> is required to confirm booking' + (dep.domestic ? ', in line with QBCC deposit limits for domestic building work' : ', non-refundable') + '.';
+  const ss = '<style>body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:0;padding:0;} .wc-page{max-width:780px;margin:0 auto;padding:32px 36px 24px;} h1{font-size:15px;text-transform:uppercase;letter-spacing:1px;color:#0ABAB5;margin:0 0 4px;} .wc-ref{font-size:11px;color:#555;margin-bottom:16px;} h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#333;margin:16px 0 4px;border-bottom:1px solid #ddd;padding-bottom:2px;} p{margin:4px 0 8px;line-height:1.65;} .sig-box{margin-top:32px;display:flex;gap:40px;flex-wrap:wrap;} .sig-party{flex:1;min-width:220px;border-top:2px solid #0ABAB5;padding-top:12px;} .sig-title{font-weight:bold;font-size:11.5px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px;} .sig-line{border-bottom:1px solid #333;height:28px;margin-bottom:6px;} .sig-label{font-size:10px;color:#555;margin-bottom:12px;} .wc-footer{margin-top:28px;font-size:9.5px;color:#888;text-align:center;border-top:1px solid #eee;padding-top:8px;} @media print{body{margin:0;} .wc-page{padding:24px 28px 16px;}}</style>';
+  const terms = [
+    ['1. Parties', 'This contract is between <strong>' + E.legalName + '</strong> (ABN ' + E.abn + ') ("Contractor") and <strong>' + client + '</strong>' + (c.businessName ? ' of <strong>' + c.businessName + '</strong>' : '') + (c.abn ? ' (ABN ' + c.abn + ')' : '') + ' ("Client").'],
+    ['2. Works', 'The Contractor agrees to carry out the works described in the attached Quote / Scope of Works (reference ' + (c.ref||'—') + ', dated ' + (c.date||'—') + ') at the site address stated in the Quote ("the Works").'],
+    ['3. Price', 'The total price for the Works is <strong>' + fmt(incGst) + ' (inc GST)</strong> as set out in the attached Quote. All prices include GST unless stated otherwise.'],
+    ['4. Deposit', depLine + ' The balance is due on completion of work before Poxit leaves the site' + (dep.domestic ? ', less any progress payments made' : '') + '.'],
+    ['5. Quote Validity', 'This quote is valid for 14 days from the date of issue. After this period pricing may be reviewed before acceptance. The price is locked once the deposit is received.'],
+    ['6. Scope Changes', 'Any change to the scope of works must be agreed in writing (email or text is sufficient) before the variation is carried out. Variations are charged at the rates set out in the Quote or, if not listed, at a reasonable rate.'],
+    ['7. Site Access and Conditions', 'The Client must ensure the Contractor has safe, clear and unobstructed access to the work area on the agreed start date. If access is not available the Contractor may charge a call-out fee of $' + (PRICE.trip || 80) + '. Hidden or subsurface conditions not visible or assessable at the time of quoting (including, but not limited to, moisture, contaminants, unstable substrate or structural defects) may require a variation.'],
+    ['8. Client Obligations', 'The Client must: (a) clear the work area of furniture, vehicles, loose items and obstacles before the start date; (b) ensure adequate power and water supply is available at the site at no cost to the Contractor; (c) keep children and animals away from the work area during works and cure periods; and (d) notify the Contractor of any known hazards (asbestos, electrical, structural) before works commence.'],
+    ['9. Commencement and Completion', 'The Contractor will make reasonable efforts to start and complete the Works on the agreed dates. Completion dates are estimates only. The Contractor is not liable for delays caused by weather, substrate conditions, access issues, material supply, or events outside its control.'],
+    ['10. Cure and Re-entry', 'Coated floors require a minimum cure period before foot traffic, vehicles or heavy loads are reintroduced. The Contractor will advise the Client of the required cure period on completion. Early entry that damages the finished surface is at the Client\'s risk and is not covered under warranty.'],
+    ['11. Warranty', warrantyText() + '. The warranty covers workmanship defects only. It does not cover damage caused by substrate failure, impact, chemical exposure, flooding, improper cleaning, early re-entry, or events outside the Contractor\'s control. Warranty claims must be submitted in writing within the warranty period.'],
+    ['12. Liability', 'The Contractor\'s liability for any claim arising under this contract is limited to the contract price. The Contractor is not liable for any indirect, consequential or economic loss. The Contractor holds current public liability insurance.'],
+    ['13. Dispute Resolution', 'If a dispute arises, both parties agree to attempt resolution by direct negotiation first. If unresolved within 14 days either party may refer the dispute to the Queensland Building and Construction Commission (QBCC) or relevant tribunal.'],
+    ['14. Cancellation', 'If the Client cancels after the deposit is paid and before works commence, the Contractor may retain the deposit as reasonable compensation for lost booking time and preliminary costs. If the Contractor cancels (other than due to substrate or access issues) the deposit will be refunded in full.'],
+    ['15. Electronic Acceptance', 'This contract may be accepted by: (a) signing the signature page below; (b) paying the deposit; or (c) sending written confirmation by email or text to <strong>' + E.email + '</strong> or <strong>' + E.phone + '</strong>. Any of these acts constitutes binding acceptance of these terms.'],
+    ['16. Governing Law', 'This contract is governed by the laws of Queensland, Australia.'],
+  ].map(function(t){ return '<h2>' + t[0] + '</h2><p>' + t[1] + '</p>'; }).join('');
+
+  const sigBox = '<div class="sig-box">' +
+    '<div class="sig-party"><div class="sig-title">Contractor: ' + E.legalName + '</div>' +
+    '<div class="sig-line"></div><div class="sig-label">Signature</div>' +
+    '<div class="sig-line"></div><div class="sig-label">' + E.director + ' &mdash; ' + E.directorTitle + '</div>' +
+    '<div class="sig-line"></div><div class="sig-label">Date</div></div>' +
+    '<div class="sig-party"><div class="sig-title">Client</div>' +
+    '<div class="sig-line"></div><div class="sig-label">Signature</div>' +
+    '<div class="sig-line"></div><div class="sig-label">' + client + (c.businessName ? ' &mdash; ' + c.businessName : '') + '</div>' +
+    (c.abn ? '<div class="sig-label" style="margin-top:-8px;">ABN ' + c.abn + '</div>' : '') +
+    '<div class="sig-line"></div><div class="sig-label">Date</div></div>' +
+    '</div>';
+
+  const coolingOff = isDomestic()
+    ? '<p style="margin-top:16px;padding:10px;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;font-size:10.5px;line-height:1.65;"><strong>Cooling-Off Period:</strong> You have a 5-business-day cooling-off period after signing. Cancel in writing within this period and no work will commence. A cancellation fee of up to $100 or 0.2% of the contract price (whichever is greater) may apply.</p>'
+    : '';
+
+  const addendumNote = c.addendum
+    ? '<p style="margin-top:14px;border-left:3px solid #0ABAB5;padding-left:10px;font-size:10.5px;">Addendum attached: any addendum provided alongside this document forms part of this contract and, to the extent of any inconsistency, prevails over these terms.</p>'
+    : '';
+
+  return '<div style="page-break-before:always;"></div>' +
+    '<!---wc--->' +
+    '<div class="wc-page">' +
+    ss +
+    docHeader('WORK CONTRACT') +
+    '<div style="margin-top:12px;">' +
+    '<p style="font-size:11.5px;"><strong>Quote Ref:</strong> ' + (c.ref||'—') + ' &nbsp;&nbsp; <strong>Date:</strong> ' + (c.date||'—') + ' &nbsp;&nbsp; <strong>Client:</strong> ' + client + (c.businessName ? ' (' + c.businessName + ')' : '') + '</p>' +
+    '<p style="font-size:11px;color:#555;">The works and price under this contract are as set out in the attached Quote (reference ' + (c.ref||'—') + '). This document and the Quote together form the entire agreement between the parties.</p>' +
+    terms +
+    addendumNote +
+    coolingOff +
+    sigBox +
+    '<div class="wc-footer">' + E.legalName + ' &middot; ABN ' + E.abn + ' &middot; ' + E.office + ' &middot; ' + E.phone + ' &middot; ' + E.email + '</div>' +
+    '</div>';
 }
 function freshOffers() {
   return { warranty:'standard', priority:false, bundle:false, careCredit:false, bookNow:false, carePlan:'Basic' };
@@ -1423,7 +1494,7 @@ function quoteMoney() {
   const o = offersState(), P = PRICE.offers;
   const extras = [];
   if (o.warranty === 'extended') extras.push({ key:'warranty', kind:'upgrade', label:P.warrantyExtYears + ' year workmanship warranty (extended from ' + P.warrantyStdYears + ' year)', ex: warrantyPrice(jobEx) });
-  if (o.priority) extras.push({ key:'priority', kind:'upgrade', label:'Priority booking: start within ' + P.priorityDays + ' days of deposit', ex: priorityPrice(jobEx) });
+  if (o.priority) { const _pmode = (S.client && S.client.priorityMode) || 'commence'; extras.push({ key:'priority', kind:'upgrade', label:'Priority booking: ' + (_pmode === 'complete' ? 'complete' : 'commence') + ' within ' + P.priorityDays + ' days of deposit', ex: priorityPrice(jobEx) }); }
   if (discountApplies('bundle')) bundleLines(sections).forEach(function(b){ extras.push(b); });
   if (discountApplies('careCredit')) {
     const cc = careCreditAmount();
@@ -1449,12 +1520,15 @@ function depositPct(contractInc) {
 }
 function depositInfo(contractInc) {
   const pct = depositPct(contractInc);
-  return { pct: pct, amount: r2(contractInc * pct / 100), domestic: isDomestic() };
+  const defaultAmount = r2(contractInc * pct / 100);
+  const custom = S.client && parseFloat(S.client.customDeposit);
+  const amount = (custom > 0) ? r2(custom) : defaultAmount;
+  return { pct: pct, amount: amount, domestic: isDomestic(), custom: !!(custom > 0) };
 }
 function paymentTermsHTML(m) {
   const d = m.deposit;
   const dep = '<strong>' + d.pct + '% deposit (' + fmt(d.amount) + ')</strong>';
-  return 'All quotes are valid for <strong>30 days</strong> from the date of issue. A ' + dep + ' is required to confirm booking and reserve the job date' +
+  return 'All quotes are valid for <strong>14 days</strong> from the date of issue. A ' + dep + ' is required to confirm booking and reserve the job date' +
     (d.domestic ? ', in line with QBCC deposit limits for domestic building work' : ', non-refundable') +
     '. The balance' + (d.domestic ? '' : ' (' + (100 - d.pct) + '%)') + ' is due on <strong>completion of work before Poxit leaves the site</strong>' +
     (d.domestic ? ', less any progress payments made' : '') + '.';
@@ -1480,7 +1554,10 @@ function priceLockText(now) {
   return 'Accept within ' + p.days + ' days (by ' + p.lockDate + ') to lock in this price. After that, pricing may be reviewed until this quote expires on ' + p.expiry + '.';
 }
 function bookingText() {
-  return offersState().priority ? 'Priority start: within ' + PRICE.offers.priorityDays + ' days of deposit.' : 'Start date confirmed on deposit.';
+  if (!offersState().priority) return 'Start date confirmed on deposit.';
+  const mode = (S.client && S.client.priorityMode) || 'commence';
+  const verb = mode === 'complete' ? 'complete' : 'commence';
+  return 'Priority booking: ' + verb + ' within ' + PRICE.offers.priorityDays + ' days of deposit.';
 }
 function offerRowsHTML(m) {
   return m.extras.map(function(x) {
@@ -1499,7 +1576,7 @@ function upgradesDocHTML(m) {
     '<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">' +
     row(o.warranty === 'extended', 'Extend to ' + P.warrantyExtYears + ' year workmanship warranty', '+' + fmt(warrantyPrice(m.jobEx)) + ' ex GST') +
     row(o.warranty === 'careplan', 'Or get the ' + P.warrantyExtYears + ' year warranty included with our top Care Plan (includes a maintenance topcoat)', '') +
-    row(!!o.priority, 'Priority Booking: lock in the next available start date ahead of our standard booking queue.', '+' + fmt(priorityPrice(m.jobEx)) + ' ex GST') +
+    row(!!o.priority, 'Priority Booking: ' + ((S.client && S.client.priorityMode) === 'complete' ? 'complete' : 'commence') + ' within ' + PRICE.offers.priorityDays + ' days of deposit, ahead of our standard booking queue.', '+' + fmt(priorityPrice(m.jobEx)) + ' ex GST') +
     '</table>' +
     '<p style="font-size:11.5px;line-height:1.7;color:#333;"><strong>' + bookingText() + '</strong>' + (priceLockText() ? ' ' + priceLockText() : '') + '</p>' +
     (S.accepted && S.accepted.date ? '<p style="font-size:11.5px;color:#333;"><strong>Accepted ' + S.accepted.date + '</strong> (' + (S.accepted.how || 'in person') + '). Warranty: ' + (S.accepted.warranty || warrantyText()) + '.</p>' : '');
@@ -1808,6 +1885,6 @@ function stampQuoteDates() {
     applyPriceOverrides({});
     return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, text: !!r.text, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });
   }
-  return { version: '77b62aadce0a', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
+  return { version: '8171ffd78251', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
            setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };
 })();

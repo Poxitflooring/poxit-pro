@@ -10,7 +10,7 @@ const acorn = require('acorn');
 const ROOT = path.join(__dirname, '..');
 // Everything the server needs; anything these use is pulled in automatically
 const ENTRY = ['freshState', 'applyRestoredPayload', 'zoneDefaults', 'ZONE_LISTS', 'buildSections', 'effSub', 'getAdjustment',
-  'quoteSnapshot', 'quoteDocHtml', 'driveQuoteName', 'docFileName', 'priceTableSpec', 'priceGet', 'priceKey', 'applyPriceOverrides',
+  'quoteSnapshot', 'quoteDocHtml', 'workContractHTML', 'driveQuoteName', 'docFileName', 'priceTableSpec', 'priceGet', 'priceKey', 'applyPriceOverrides',
   'PRICE_DEFAULTS', 'applyAutoSite', 'estimateDays', 'setPath', 'getPath', 'stampQuoteDates', 'r2', 'ENTITIES', 'entityForKey',
   'LOCATIONS', 'SERVICES', 'quoteServiceNames', 'spallingOptions', 'docJobLabel', 'fmt', 'cleanSnapText', 'CEM_WARRANTY_NOTE',
   'quoteMoney', 'invoiceCalc', 'invoiceDocHtml', 'variationList', 'warrantyText', 'offersState'];
