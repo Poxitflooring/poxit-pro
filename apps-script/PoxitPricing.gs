@@ -2,7 +2,7 @@
 //  POXIT PRICING  (file: PoxitPricing.gs)
 //  GENERATED from the quote tool (index.html) by tools/build-pricing.js.
 //  Do not edit by hand: paste the new version whenever the tool's pricing changes.
-//  Pricing version: 8171ffd78251
+//  Pricing version: bf2a84005602
 // =====================================================================
 var PXP = (function () {
   // No screen on the server: anything that would touch it is never called here
@@ -1627,7 +1627,11 @@ function invoiceCalc(stage, opts) {
   const discountsTaken = r2(history.reduce(function(t, h){ return t + h.early; }, 0));
   const balanceBefore = r2(totalInc - paidToDate);
   let amount = 0, progressNo = 0;
-  if (stage === 'deposit') amount = m.deposit.amount;
+  let depCustom = false;
+  if (stage === 'deposit') {
+    const ca = parseFloat(opts.amount);
+    if (ca > 0) { amount = Math.min(ca, balanceBefore); depCustom = true; } else { amount = m.deposit.amount; depCustom = !!m.deposit.custom; }
+  }
   else if (stage === 'progress') { amount = r2(Math.min(parseFloat(opts.amount) || 0, balanceBefore)); progressNo = pn + 1; }
   else if (stage === 'final' || stage === 'full') amount = Math.max(0, balanceBefore);
   amount = r2(amount);
@@ -1638,7 +1642,22 @@ function invoiceCalc(stage, opts) {
   }
   return { money: m, contractInc: contractInc, variationsInc: varInc, totalInc: totalInc, history: history, paidToDate: paidToDate, discountsTaken: discountsTaken, received: r2(paidToDate - discountsTaken),
            balanceBefore: balanceBefore, amount: amount, gst: r2(amount / 11), balanceAfter: r2(balanceBefore - amount),
-           progressNo: progressNo, early: early, unpaid: history.filter(function(h){ return !h.paid; }) };
+           progressNo: progressNo, early: early, unpaid: history.filter(function(h){ return !h.paid; }),
+           depCustom: depCustom, depWithinQbcc: stage === 'deposit' && isDomestic() && amount <= r2(contractInc * depositPct(contractInc) / 100) + 0.005 };
+}
+function invoiceTermsHTML(stage, k, due) {
+  const d = k.money.deposit;
+  let t = 'All quotes are valid for <strong>14 days</strong> from the date of issue. ';
+  if (stage === 'full') t += 'Payment in full is required to confirm your booking.';
+  else if (stage === 'deposit') {
+    t += 'A <strong>' + (k.depCustom ? 'deposit' : d.pct + '% deposit') + ' of ' + fmt(k.amount) + '</strong> is required to confirm your booking' +
+      (k.depWithinQbcc ? ', in line with the QBCC deposit limits for domestic building work' : '') +
+      '. The balance is due on completion, less any progress payments.';
+  }
+  else if (stage === 'progress') t += '<strong>Progress payment of ' + fmt(k.amount) + '</strong> is due now. The balance of <strong>' + fmt(k.balanceAfter) + '</strong> is due within 7 days of practical completion.';
+  else if (stage === 'final') t += 'The final balance of <strong>' + fmt(k.amount) + '</strong> is due by <strong>' + fmtAUDate(due) + '</strong>.';
+  else t += 'This job has been paid in full. Thank you.';
+  return t;
 }
 const INVOICE_TITLES = { deposit:'Deposit Invoice', progress:'Progress Invoice', final:'Final Invoice', full:'Full Payment Invoice', paid:'Paid Invoice' };
 const INVOICE_TYPES = { deposit:'Deposit', progress:'Progress', final:'Final', full:'Full Payment', paid:'Paid' };
@@ -1667,7 +1686,7 @@ function invoiceDocHtml(stage, invNo, opts) {
     if (h.early) ph += hist('Early payment discount on ' + h.invNo, '-' + fmt(h.early));
   });
   ph += hist('Balance remaining', fmt(k.balanceBefore), 'due');
-  const stageLabel = stage === 'deposit' ? k.money.deposit.pct + '% deposit (due to confirm booking)'
+  const stageLabel = stage === 'deposit' ? (k.depCustom ? 'Deposit' : k.money.deposit.pct + '% deposit') + ' (due to confirm booking)'
     : stage === 'progress' ? 'Progress payment ' + k.progressNo
     : stage === 'final' ? 'Final balance (due on completion)'
     : stage === 'full' ? 'Full payment' : 'Paid in full';
@@ -1697,7 +1716,7 @@ function invoiceDocHtml(stage, invNo, opts) {
     '<div class="section-heading"><span class="section-num">2.</span><span class="section-title">Payment History</span></div>' +
     '<div class="payment-box">' + ph + '</div>' + thisInv +
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Terms &amp; Warranty</span></div>' +
-    '<p style="font-size:11.5px;line-height:1.7;color:#333;">' + paymentTermsHTML(m) + ' Warranty: <strong>' + warrantyText() + '</strong>.</p>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;">' + invoiceTermsHTML(stage, k, due) + ' Warranty: <strong>' + warrantyText() + '</strong>.</p>' +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
     '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invNo + '</strong></div>' +
     (m.sections.some(function(x){ return x.key === 'spallCem'; }) ? cemWarrantyHTML() : '') +
@@ -1885,6 +1904,6 @@ function stampQuoteDates() {
     applyPriceOverrides({});
     return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, text: !!r.text, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });
   }
-  return { version: '8171ffd78251', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
+  return { version: 'bf2a84005602', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
            setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };
 })();

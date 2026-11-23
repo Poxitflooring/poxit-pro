@@ -1001,7 +1001,7 @@ setTimeout(async ()=>{try{
  run("setOffer('warranty','careplan')"); ok(Math.abs(total()-4650)<0.001 && run("warrantyText()").indexOf('top Care Plan')>-1,'WARRANTY Care Plan option: 5 years, no charge on the job');
  run("setOffer('warranty','standard'); generatePDF();"); ok((run("window.__doc").match(/Workmanship warranty: 1 year</g)||[]).length===2,'WARRANTY standard 1 year per system');
  run("setOffer('priority',true)"); ok(Math.abs(total()-(4650+250))<0.001,'PRIORITY 5% ($232.50) lifts to the $250 minimum');
- run("generatePDF()"); ok(run("window.__doc").indexOf('Priority start: within 7 days of deposit.')>-1,'PRIORITY quote shows the priority start');
+ run("generatePDF()"); ok(run("window.__doc").indexOf('Priority booking: commence within 7 days of deposit.')>-1,'PRIORITY quote shows the priority start');
  run("S.epoxyZones[0].area=400; calcAll();"); ok(Math.abs(run("quoteMoney().extras.find(function(x){return x.key==='priority';}).ex")-1500)<0.001,'PRIORITY capped at $1,500');
  run("S.epoxyZones[0].area=45; setOffer('priority',false); generatePDF();"); ok(run("window.__doc").indexOf('Start date confirmed on deposit.')>-1,'PRIORITY standard shows "Start date confirmed on deposit"');
  run("setOffer('bundle',true)"); var mb=JSON.parse(run("JSON.stringify(quoteMoney().extras)"));
@@ -1022,8 +1022,8 @@ setTimeout(async ()=>{try{
  run("S.epoxyZones[0].area=300; calcAll();"); ok(run("quoteMoney().deposit.pct")===5,'DEPOSIT domestic $20,000 and over = 5%');
  run("S.epoxyZones[0].area=45; addZone('seal'); S.sealZones[0].name='Patio'; S.sealZones[0].area=30; S.offers.bundle=true; S.offers.bookNow=true; calcAll();");
  // price lock
- run("S.client.date=fmtAUDate(new Date()); S.client.valid='01/01/2099';"); ok(/^Accept within 7 days \(by \d\d\/\d\d\/\d{4}\) to lock in this price\. After that, pricing may be reviewed until this quote expires on 01\/01\/2099\.$/.test(run("priceLockText()")),'PRICE LOCK shows the lock deadline');
- run("S.client.date=fmtAUDate(new Date(Date.now()-9*86400000));"); ok(run("priceLockText()")==='This quote expires on 01/01/2099.','PRICE LOCK after 7 days shows just the expiry');
+ run("S.client.date=fmtAUDate(new Date()); S.client.valid='01/01/2099';"); ok(/^Accept within 14 days \(by \d\d\/\d\d\/\d{4}\) to lock in this price\. After that, pricing may be reviewed until this quote expires on 01\/01\/2099\.$/.test(run("priceLockText()")),'PRICE LOCK shows the lock deadline');
+ run("S.client.date=fmtAUDate(new Date(Date.now()-16*86400000));"); ok(run("priceLockText()")==='This quote expires on 01/01/2099.','PRICE LOCK after 14 days shows just the expiry');
  // 8. invoices with payment history
  run("S.saveKey='PXT-1790000000001'; S.client.ref='PXT-2026-300'; LEDGER={key:S.saveKey,loaded:true,rows:[{invNo:'INV-2026-050',type:'Deposit',date:'01/12/2026',amount:494.8,paid:true},{invNo:'INV-2026-051',type:'Progress',date:'05/12/2026',amount:1000,paid:false,progressNo:1}]};");
  await run("makeInvoice('final')"); var fi=run("window.__doc"); var tot=run("quoteMoney().incGst");
@@ -1151,5 +1151,36 @@ setTimeout(async ()=>{try{
  run("setFitout('trades',false)"); ok(sec('fitout')==='null' && run("S.fitout.on")===false,'FITOUT switching trades off removes the check');
  run("var st2=JSON.parse(JSON.stringify(S)); delete st2.sandtopZones; delete st2.fitout; restoreQuote({state:st2,measureShapes:[]});"); ok(Array.isArray(run("S.sandtopZones")) && run("S.fitout.trades")===false,'OLD QUOTE opens with the new fields filled in');
  run("closeDocOverlay(); confirmReset(false);");
+ // ===================== 24 NOV: invoice terms follow the invoice type =====================
+ run("confirmReset(false); S.client.first='Terms'; S.client.last='Test'; S.client.location='Internal'; S.client.ref='PXT-2026-200'; S.client.date=fmtAUDate(new Date()); S.client.customDeposit=''; S.services.epoxy=true; addZone('epoxy'); S.epoxyZones[0].name='Garage'; S.epoxyZones[0].area=40; calcAll();");
+ var TERMS={};
+ var terms=function(stage,amt,ledger){ var h=run("invoiceDocHtml('"+stage+"','INV-2026-099',{ledger:"+JSON.stringify(ledger||[])+",amount:"+JSON.stringify(amt||'')+",date:new Date(2026,10,24)}).html"); var m=h.match(/<p style="font-size:11.5px;line-height:1.7;color:#333;">([\s\S]*?)<\/p>/); return m?m[1].replace(/<[^>]+>/g,''):''; };
+ var inc=function(){ return run("r2(quoteMoney().incGst)"); };
+ ['Domestic','Commercial'].forEach(function(jt){
+   run("setJobType('"+jt+"'); calcAll();");
+   var dom=jt==='Domestic', pct=run("depositPct(quoteMoney().incGst)"), tot=inc(), dep=run("r2(quoteMoney().incGst*depositPct(quoteMoney().incGst)/100)");
+   var f=terms('full'); TERMS[jt+' full']=f;
+   ok(/Payment in full is required to confirm your booking\./.test(f) && !/deposit/i.test(f) && !/QBCC/.test(f),'TERMS '+jt+' full payment: no deposit or QBCC wording');
+   var d=terms('deposit'); TERMS[jt+' deposit']=d;
+   ok(d.indexOf('A '+pct+'% deposit of '+run("fmt("+dep+")")+' is required to confirm your booking')>-1 && /The balance is due on completion, less any progress payments\./.test(d),'TERMS '+jt+' deposit shows '+pct+'% and the dollar amount');
+   ok(dom ? /in line with the QBCC deposit limits for domestic building work/.test(d) : !/QBCC/.test(d),'TERMS '+jt+(dom?' deposit has':' deposit never has')+' the QBCC wording');
+   var cd=terms('deposit',300); TERMS[jt+' custom deposit']=cd;
+   ok(cd.indexOf('A deposit of $300.00 is required to confirm your booking')>-1 && cd.indexOf('%')<0,'TERMS '+jt+' custom deposit uses the typed amount');
+   ok(dom ? /QBCC/.test(cd) : !/QBCC/.test(cd),'TERMS '+jt+' custom deposit QBCC wording only on domestic');
+   var pr=terms('progress',2000,[{invNo:'INV-2026-090',type:'Deposit',amount:1000,paid:true}]); TERMS[jt+' progress']=pr;
+   ok(pr.indexOf('Progress payment of $2,000.00 is due now. The balance of '+run("fmt(r2("+tot+"-1000-2000))")+' is due within 7 days of practical completion.')>-1 && !/QBCC|deposit/i.test(pr),'TERMS '+jt+' progress: amount now, balance within 7 days of practical completion');
+   ok(Object.keys(TERMS).filter(function(k){return k.indexOf(jt)===0;}).every(function(k){ return /^All quotes are valid for 14 days from the date of issue\. /.test(TERMS[k]); }),'TERMS '+jt+' quote validity sentence unchanged');
+   ok(Object.keys(TERMS).every(function(k){ return !/[‐-―]| - /.test(TERMS[k]); }),'TERMS '+jt+' no hyphens or dashes');
+ });
+ run("setJobType('Domestic'); calcAll();");
+ var big=terms('deposit', 99999); ok(!/QBCC/.test(big),'TERMS domestic custom deposit above the QBCC limit leaves the QBCC wording off');
+ var dh=run("invoiceDocHtml('deposit','INV-2026-099',{ledger:[],amount:1500}).html"); ok(dh.indexOf('<div>Deposit (due to confirm booking)</div><div class="p-amount">$1,500.00</div>')>-1,'TERMS custom deposit is the amount on the invoice');
+ run("S.client.customDeposit=1200; calcAll();"); ok(/A deposit of \$1,200\.00/.test(terms('deposit')),'TERMS Details tab custom deposit still works');
+ ok(/Warranty: 1 year workmanship warranty\./.test(run("invoiceDocHtml('full','INV-2026-099',{ledger:[]}).html").replace(/<[^>]+>/g,'')),'TERMS warranty sentence unchanged');
+ run("S.client.customDeposit=''; generatePDF();"); ok(run("window.__doc").indexOf('in line with QBCC deposit limits for domestic building work')>-1,'TERMS quote and contract wording untouched');
+ run("closeDocOverlay(); generateInvoice(); pickInvStage('deposit');"); ok(run("document.getElementById('invDepField').style.display")==='' && run("document.getElementById('invDep').placeholder").indexOf('Blank = '+run("depositPct(quoteMoney().incGst)")+'%')>-1,'TERMS invoice modal has the custom deposit field');
+ run("pickInvStage('progress')"); ok(run("document.getElementById('invDepField').style.display")==='none','TERMS custom deposit field hides for other types');
+ run("document.getElementById('invoiceModal').classList.remove('open'); confirmReset(false);");
+ require('fs').writeFileSync('/tmp/claude-0/-home-claude/a30b5ba6-8492-582c-9f72-b37d1c5b8583/scratchpad/terms.json', JSON.stringify(TERMS,null,1));
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

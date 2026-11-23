@@ -3948,7 +3948,11 @@ function invoiceCalc(stage, opts) {
   const discountsTaken = r2(history.reduce(function(t, h){ return t + h.early; }, 0));
   const balanceBefore = r2(totalInc - paidToDate);
   let amount = 0, progressNo = 0;
-  if (stage === 'deposit') amount = m.deposit.amount;
+  let depCustom = false;
+  if (stage === 'deposit') {
+    const ca = parseFloat(opts.amount);
+    if (ca > 0) { amount = Math.min(ca, balanceBefore); depCustom = true; } else { amount = m.deposit.amount; depCustom = !!m.deposit.custom; }
+  }
   else if (stage === 'progress') { amount = r2(Math.min(parseFloat(opts.amount) || 0, balanceBefore)); progressNo = pn + 1; }
   else if (stage === 'final' || stage === 'full') amount = Math.max(0, balanceBefore);
   amount = r2(amount);
@@ -3959,7 +3963,23 @@ function invoiceCalc(stage, opts) {
   }
   return { money: m, contractInc: contractInc, variationsInc: varInc, totalInc: totalInc, history: history, paidToDate: paidToDate, discountsTaken: discountsTaken, received: r2(paidToDate - discountsTaken),
            balanceBefore: balanceBefore, amount: amount, gst: r2(amount / 11), balanceAfter: r2(balanceBefore - amount),
-           progressNo: progressNo, early: early, unpaid: history.filter(function(h){ return !h.paid; }) };
+           progressNo: progressNo, early: early, unpaid: history.filter(function(h){ return !h.paid; }),
+           depCustom: depCustom, depWithinQbcc: stage === 'deposit' && isDomestic() && amount <= r2(contractInc * depositPct(contractInc) / 100) + 0.005 };
+}
+// Invoice terms follow the invoice type. Quote validity sentence stays as it is.
+function invoiceTermsHTML(stage, k, due) {
+  const d = k.money.deposit;
+  let t = 'All quotes are valid for <strong>14 days</strong> from the date of issue. ';
+  if (stage === 'full') t += 'Payment in full is required to confirm your booking.';
+  else if (stage === 'deposit') {
+    t += 'A <strong>' + (k.depCustom ? 'deposit' : d.pct + '% deposit') + ' of ' + fmt(k.amount) + '</strong> is required to confirm your booking' +
+      (k.depWithinQbcc ? ', in line with the QBCC deposit limits for domestic building work' : '') +
+      '. The balance is due on completion, less any progress payments.';
+  }
+  else if (stage === 'progress') t += '<strong>Progress payment of ' + fmt(k.amount) + '</strong> is due now. The balance of <strong>' + fmt(k.balanceAfter) + '</strong> is due within 7 days of practical completion.';
+  else if (stage === 'final') t += 'The final balance of <strong>' + fmt(k.amount) + '</strong> is due by <strong>' + fmtAUDate(due) + '</strong>.';
+  else t += 'This job has been paid in full. Thank you.';
+  return t;
 }
 const INVOICE_TITLES = { deposit:'Deposit Invoice', progress:'Progress Invoice', final:'Final Invoice', full:'Full Payment Invoice', paid:'Paid Invoice' };
 const INVOICE_TYPES = { deposit:'Deposit', progress:'Progress', final:'Final', full:'Full Payment', paid:'Paid' };
@@ -3989,7 +4009,7 @@ function invoiceDocHtml(stage, invNo, opts) {
     if (h.early) ph += hist('Early payment discount on ' + h.invNo, '-' + fmt(h.early));
   });
   ph += hist('Balance remaining', fmt(k.balanceBefore), 'due');
-  const stageLabel = stage === 'deposit' ? k.money.deposit.pct + '% deposit (due to confirm booking)'
+  const stageLabel = stage === 'deposit' ? (k.depCustom ? 'Deposit' : k.money.deposit.pct + '% deposit') + ' (due to confirm booking)'
     : stage === 'progress' ? 'Progress payment ' + k.progressNo
     : stage === 'final' ? 'Final balance (due on completion)'
     : stage === 'full' ? 'Full payment' : 'Paid in full';
@@ -4019,7 +4039,7 @@ function invoiceDocHtml(stage, invNo, opts) {
     '<div class="section-heading"><span class="section-num">2.</span><span class="section-title">Payment History</span></div>' +
     '<div class="payment-box">' + ph + '</div>' + thisInv +
     '<div class="section-heading"><span class="section-num">3.</span><span class="section-title">Terms &amp; Warranty</span></div>' +
-    '<p style="font-size:11.5px;line-height:1.7;color:#333;">' + paymentTermsHTML(m) + ' Warranty: <strong>' + warrantyText() + '</strong>.</p>' +
+    '<p style="font-size:11.5px;line-height:1.7;color:#333;">' + invoiceTermsHTML(stage, k, due) + ' Warranty: <strong>' + warrantyText() + '</strong>.</p>' +
     pwPlanDocHTML(S.pwPlan && S.pwPlan.showInvoice) +
     '<div class="bank-box"><strong>Bank Transfer:</strong><br>Account Name: <strong>' + docEntity().bankAccountName + '</strong><br>BSB: <strong>' + (docEntity().bankBSB || '[FILL IN]') + '</strong>&nbsp;&nbsp;&nbsp;Account: <strong>' + (docEntity().bankAccount || '[FILL IN]') + '</strong><br>Reference: <strong>' + invNo + '</strong></div>' +
     (m.sections.some(function(x){ return x.key === 'spallCem'; }) ? cemWarrantyHTML() : '') +
@@ -4190,6 +4210,7 @@ function generateInvoice() {
   m.innerHTML = '<div class="modal-sheet"><div class="modal-title">🧾 New Invoice</div>' +
     '<div class="field"><label>Invoice for</label><div class="radio-group" id="invStagePills">' +
     ['deposit','progress','final','full','paid'].map(function(s, i){ return '<div class="radio-pill' + (i === 0 ? ' selected' : '') + '" data-stage="' + s + '" onclick="pickInvStage(\'' + s + '\')">' + INVOICE_TYPES[s] + '</div>'; }).join('') + '</div></div>' +
+    '<div class="field" id="invDepField"><label>Custom deposit amount (inc GST)</label><input type="number" id="invDep" min="0" step="0.01" value="' + (parseFloat(S.client.customDeposit) > 0 ? parseFloat(S.client.customDeposit) : '') + '" placeholder="Blank = ' + quoteMoney().deposit.pct + '% (' + fmt(r2(quoteMoney().incGst * depositPct(quoteMoney().incGst) / 100)) + ')"></div>' +
     '<div class="field" id="invAmtField" style="display:none;"><label>Progress amount (inc GST)</label><input type="number" id="invAmt" min="0" step="0.01"></div>' +
     '<div class="field" id="invDoneField" style="display:none;"><label>Completion date (early payment deadline)</label><input type="text" id="invDone" placeholder="dd/mm/yyyy" value="' + fmtAUDate(new Date()) + '"></div>' +
     '<div class="text-muted" style="font-size:11px;" id="invLedgerNote">' + (S.saveKey ? 'Loading payment history…' : 'Not saved yet: no payment history. Save the quote first so payments are tracked.') + '</div>' +
@@ -4207,11 +4228,16 @@ function pickInvStage(s) {
   window.__invStage = s;
   document.querySelectorAll('#invStagePills .radio-pill').forEach(function(p){ p.classList.toggle('selected', p.getAttribute('data-stage') === s); });
   document.getElementById('invAmtField').style.display = s === 'progress' ? '' : 'none';
+  document.getElementById('invDepField').style.display = s === 'deposit' ? '' : 'none';
   document.getElementById('invDoneField').style.display = s === 'final' ? '' : 'none';
 }
 function makeInvoice(stage, amount, completion) {
   stage = stage || window.__invStage || 'deposit';
-  if (amount === undefined) { const a = document.getElementById('invAmt'); amount = a ? a.value : 0; }
+  if (amount === undefined) { const a = document.getElementById(stage === 'deposit' ? 'invDep' : 'invAmt'); amount = a ? a.value : 0; }
+  if (stage === 'deposit' && parseFloat(amount) > 0 && isDomestic()) {
+    const mm = quoteMoney(), cap = r2(mm.incGst * depositPct(mm.incGst) / 100);
+    if (parseFloat(amount) > cap + 0.005) alert('Heads up: ' + fmt(parseFloat(amount)) + ' is above the QBCC deposit limit for this job (' + depositPct(mm.incGst) + '%, ' + fmt(cap) + '). The invoice will leave the QBCC wording off.');
+  }
   if (completion === undefined) { const d = document.getElementById('invDone'); completion = d ? d.value : ''; }
   if (stage === 'progress' && !(parseFloat(amount) > 0)) { alert('Enter the progress amount (inc GST).'); return Promise.resolve(null); }
   const modal = document.getElementById('invoiceModal'); if (modal) modal.classList.remove('open');
