@@ -1182,5 +1182,16 @@ setTimeout(async ()=>{try{
  run("pickInvStage('progress')"); ok(run("document.getElementById('invDepField').style.display")==='none','TERMS custom deposit field hides for other types');
  run("document.getElementById('invoiceModal').classList.remove('open'); confirmReset(false);");
  require('fs').writeFileSync('/tmp/claude-0/-home-claude/a30b5ba6-8492-582c-9f72-b37d1c5b8583/scratchpad/terms.json', JSON.stringify(TERMS,null,1));
+ // ===================== 27 NOV: client facing Client Details page, internal Job Details page =====================
+ run("confirmReset(false); showTab('client');");
+ var p1=run("[].map.call(document.querySelectorAll('#clientPage1 input,#clientPage1 select,#clientPage1 textarea'),function(e){return e.getAttribute('data-bind')||e.id;}).join(',')");
+ ok(p1==='client.first,client.last,client.phone,client.email,client.address,suburbSel','CLIENT PAGE 1 has only first, last, phone, email, address and suburb ('+p1+')');
+ var p2=run("[].map.call(document.querySelectorAll('#clientPage2 input,#clientPage2 select,#clientPage2 textarea'),function(e){return e.getAttribute('data-bind')||e.id;}).join(',')");
+ ok(['client.location','client.entity','client.area','client.businessName','client.abn','client.date','client.valid','client.ref','client.customDeposit','client.addendum','client.internalNotes','client.clientNotes'].every(function(f){return p2.split(',').indexOf(f)>-1;}),'CLIENT PAGE 2 holds every job field');
+ ok(run("!!document.querySelector('#clientPage2 .jobtype-pill') && !!document.querySelector('#clientPage2 #pmode-commence') && !!document.querySelector('#clientPage2 #suburbNote')"),'CLIENT PAGE 2 has job type, priority wording and the travel note');
+ ok(run("document.getElementById('clientPage2').style.display")==='none' && run("document.getElementById('clientPage2').textContent").indexOf('Internal: Poxit only')>-1,'CLIENT PAGE 2 hidden by default and marked internal');
+ ok(run("!/km\\)/.test(document.getElementById('suburbSel').innerHTML)") && run("[].some.call(document.querySelectorAll('.suburb-sel'),function(s){return /km\\)/.test(s.innerHTML);})||document.querySelectorAll('.suburb-sel').length===0"),'CLIENT PAGE 1 suburb list has no travel km');
+ run("showClientPage(2)"); ok(run("document.getElementById('clientPage1').style.display")==='none','CLIENT page 2 swaps in');
+ run("showClientPage(1)");
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

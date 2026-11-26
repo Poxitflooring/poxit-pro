@@ -176,6 +176,11 @@
 <div class="content">
 
 <div id="tab-client" class="section active">
+  <div class="radio-group" id="clientPagePills" style="margin-bottom:10px;">
+    <div class="radio-pill selected" data-cp="1" onclick="showClientPage(1)">1. Client Details</div>
+    <div class="radio-pill" data-cp="2" onclick="showClientPage(2)">2. Job Details 🔒</div>
+  </div>
+  <div id="clientPage1">
   <div class="card"><div class="card-header"><div class="card-title">Client Details</div><button class="btn-icon" style="color:var(--red);font-size:12px;padding:4px 10px;" onclick="clearClient()">✖ Clear Client</button></div>
   <div class="card-body">
     <div class="row">
@@ -185,11 +190,19 @@
     <div class="field"><label>Phone</label><input type="text" data-bind="client.phone" placeholder="04xx xxx xxx"></div>
     <div class="field"><label>Email</label><input type="text" data-bind="client.email" placeholder="john@email.com"></div>
     <div class="field"><label>Street Address</label><input type="text" data-bind="client.address" placeholder="123 Example St"></div>
-    <div class="field"><label>Suburb</label><select id="suburbSel" onchange="onSuburbChange(this)"><option value="">Select suburb…</option></select><div id="suburbNote" class="info-box" style="font-size:11px;margin-top:6px;">Pick a suburb to auto-apply travel.</div></div>
+    <div class="field"><label>Suburb</label><select id="suburbSel" onchange="onSuburbChange(this)"><option value="">Select suburb…</option></select></div>
+  </div></div>
+  <div class="nav-row"><button class="nav-btn next" onclick="showClientPage(2)">Next ➤</button></div>
+  </div>
+  <div id="clientPage2" style="display:none;">
+  <div class="info-box" style="border-color:var(--red);font-size:12px;margin-bottom:10px;">🔒 <strong>Internal: Poxit only.</strong> Job settings for the quote. Don't show this page to the client.</div>
+  <div class="card"><div class="card-header"><div class="card-title">🔒 Job Details</div></div>
+  <div class="card-body">
     <div class="field"><label>Location <span style="color:var(--red);">*</span></label><select id="locationSel" data-bind="client.location" onchange="onLocationChange()"><option value="">Select location…</option><option value="Internal">Internal</option><option value="External">External</option><option value="Both">Both</option></select><div id="locationNote" class="info-box" style="font-size:11px;margin-top:6px;">Required. External and Both jobs are weather dependent.</div></div>
     <div class="field"><label>Job Type</label><div class="radio-group"><div class="radio-pill jobtype-pill selected" data-v="Domestic" onclick="setJobType('Domestic')">Domestic</div><div class="radio-pill jobtype-pill" data-v="Commercial" onclick="setJobType('Commercial')">Commercial</div></div><div class="text-muted" style="font-size:10px;margin-top:4px;">Domestic deposits follow the QBCC limits. Commercial uses your normal deposit.</div></div>
     <div class="field"><label>Business Entity</label><select id="entitySel" data-bind="client.entity"><option value="Company">Poxit Flooring Pty Ltd (company)</option><option value="Sole Trader">Poxit Flooring (sole trader)</option></select><div class="info-box" style="font-size:11px;margin-top:6px;">Sets the ABN and bank account on the quote and invoices. Quotes first saved before 15 Oct 2026 stay on the sole trader details.</div></div>
     <div class="field"><label>Job Area</label><input type="text" data-bind="client.area" placeholder="e.g. Garage"><div class="info-box" style="font-size:11px;margin-top:6px;">Used in the saved PDF name. Leave blank to use the first zone name.</div></div>
+    <div class="field"><label>Travel</label><div id="suburbNote" class="info-box" style="font-size:11px;margin-top:6px;">Pick a suburb to auto-apply travel.</div></div>
     <div class="field"><label>Business Name (optional)</label><input type="text" data-bind="client.businessName" placeholder="e.g. Smith Constructions Pty Ltd"></div>
     <div class="field"><label>ABN (optional)</label><input type="text" data-bind="client.abn" placeholder="e.g. 12 345 678 901"></div>
     <div class="field"><label>Quote Date</label><input type="text" data-bind="client.date"></div>
@@ -209,7 +222,8 @@
       <textarea data-bind="client.clientNotes" rows="3" placeholder="Included in quote..."></textarea>
     </div>
   </div></div>
-  <div class="nav-row"><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
+  <div class="nav-row"><button class="nav-btn" onclick="showClientPage(1)">◀ Client Details</button><button class="nav-btn next" onclick="nextTab()">Next ➤</button></div>
+  </div>
 </div>
 
 <div id="tab-measure" class="section">
@@ -913,6 +927,7 @@ function showTab(name) {
   currentTab = name;
   document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  if (name === 'client') showClientPage(1);  // always open on the client facing page
   const sec = document.getElementById('tab-' + name);
   if (sec) sec.classList.add('active');
   const tab = document.querySelector('.tab[data-tab="' + name + '"]');
@@ -949,6 +964,14 @@ function subOfKey(key) {
   if (/^(joints|softcuts|silJoints|polyJoints|coreDrill)/.test(k)) return 'joints';
   if (/^(cracks|spall|skim|cancer|ramp)/.test(k)) return 'repairs';
   return 'floors';
+}
+function showClientPage(n) {
+  const p1 = document.getElementById('clientPage1'), p2 = document.getElementById('clientPage2');
+  if (!p1 || !p2) return;
+  p1.style.display = n === 2 ? 'none' : '';
+  p2.style.display = n === 2 ? '' : 'none';
+  document.querySelectorAll('#clientPagePills .radio-pill').forEach(function(x){ x.classList.toggle('selected', x.getAttribute('data-cp') === String(n)); });
+  window.scrollTo && window.scrollTo(0, 0);
 }
 function nextTab() { const i = NAV.indexOf(currentTab); if (i > -1 && i < NAV.length-1) showTab(NAV[i+1]); }
 function prevTab() { const i = NAV.indexOf(currentTab); if (i > 0) showTab(NAV[i-1]); }
@@ -1169,11 +1192,14 @@ function suburbBillableKm(name){
 function populateSuburbs(){
   const names = Object.keys(PRICE.suburbKm).sort();
   const custom = S.travel && S.travel.mode === 'custom';
-  const html = '<option value="">Select suburb…</option><option value="__custom__"' + (custom ? ' selected' : '') + '>✏️ Custom location (outside the Gold Coast)</option>' + names.map(function(n){
-    const b = suburbBillableKm(n);
-    return '<option value="' + n.replace(/"/g,'&quot;') + '"' + (!custom && S.client.suburb === n ? ' selected' : '') + '>' + n + (b > 0 ? ' (+' + b + 'km)' : '') + '</option>';
-  }).join('');
-  document.querySelectorAll('#suburbSel, .suburb-sel').forEach(function(sel){ sel.innerHTML = html; });
+  // The Client Details page is client facing, so its dropdown leaves the travel km off
+  const opts = function(showKm) {
+    return '<option value="">Select suburb…</option><option value="__custom__"' + (custom ? ' selected' : '') + '>✏️ Custom location (outside the Gold Coast)</option>' + names.map(function(n){
+      const b = suburbBillableKm(n);
+      return '<option value="' + n.replace(/"/g,'&quot;') + '"' + (!custom && S.client.suburb === n ? ' selected' : '') + '>' + n + (showKm && b > 0 ? ' (+' + b + 'km)' : '') + '</option>';
+    }).join('');
+  };
+  document.querySelectorAll('#suburbSel, .suburb-sel').forEach(function(sel){ sel.innerHTML = opts(sel.id !== 'suburbSel'); });
   const note = document.getElementById('suburbNote');
   if (note) {
     const t = S.travel || {};
@@ -4641,7 +4667,7 @@ async function saveQuote(mode) {
   mode = mode || 'new';
   syncBoundInputs();
   if (LOCATIONS.indexOf(S.client.location) < 0) {
-    alert('Pick a Location (Internal, External or Both) on the Client Details card before saving.');
+    alert('Pick a Location (Internal, External or Both) on the Job Details page (Client tab, page 2) before saving.'); showTab('client'); showClientPage(2);
     showTab('client');
     const sel = document.getElementById('locationSel');
     if (sel) { sel.style.borderColor = 'var(--red)'; try { sel.focus(); } catch(e) {} }
