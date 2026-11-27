@@ -2,7 +2,7 @@
 //  POXIT PRICING  (file: PoxitPricing.gs)
 //  GENERATED from the quote tool (index.html) by tools/build-pricing.js.
 //  Do not edit by hand: paste the new version whenever the tool's pricing changes.
-//  Pricing version: bf2a84005602
+//  Pricing version: a04eb5d5e944
 // =====================================================================
 var PXP = (function () {
   // No screen on the server: anything that would touch it is never called here
@@ -1240,7 +1240,7 @@ const COMPANY = {
   abn:         '23 702 727 535',
   acn:         '702 727 535',
   gstRegistered: true,
-  office:      '1/12 Dorretti Circuit, Upper Coomera QLD 4209',
+  office:      'Gold Coast, QLD',
   director:    'Dominic Amsteins',
   directorTitle: 'Director',
   phone:       '0478 495 995',
@@ -1904,6 +1904,6 @@ function stampQuoteDates() {
     applyPriceOverrides({});
     return priceTableSpec().map(function (g) { return { title: g.title, rows: g.rows.map(function (r) { return { key: priceKey(r.path), label: r.label, unit: r.unit, text: !!r.text, original: priceGet(PRICE_DEFAULTS, r.path) }; }) }; });
   }
-  return { version: 'bf2a84005602', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
+  return { version: 'a04eb5d5e944', run: run, invoice: invoice, priceTable: priceTable, zoneDefaults: zoneDefaults, zoneLists: ZONE_LISTS, freshState: freshState,
            setPath: setPath, getPath: getPath, locations: LOCATIONS, services: SERVICES.map(function (x) { return x.key; }) };
 })();

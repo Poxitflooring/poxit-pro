@@ -478,7 +478,7 @@ setTimeout(async ()=>{try{
  ok((qd+idoc).indexOf('11 743 009 073')<0 && (qd+idoc).indexOf('11743009073')<0,'old ABN gone from quote and invoice');
  ok((qd+idoc).indexOf('17789072')<0,'old personal account number gone');
  ok(idoc.indexOf('Account Name: <strong>Poxit Flooring Pty Ltd</strong>')>=0,'invoice bank box uses company account name');
- ok(qd.indexOf('1/12 Dorretti Circuit, Upper Coomera QLD 4209')>=0 && qd.indexOf('www.poxitflooring.com.au')>=0,'footer shows registered office and web');
+ ok(qd.indexOf('Dorretti')<0 && qd.indexOf('Upper Coomera QLD')<0 && qd.indexOf('Gold Coast, QLD')>=0 && qd.indexOf('www.poxitflooring.com.au')>=0,'footer shows Gold Coast, QLD and no home address');
  ok(idoc.indexOf('Poxit Flooring Pty Ltd ABN 23 702 727 535')>=0,'invoice disclaimer carries the company ABN');
  ok(idoc.indexOf('GST')>=0 && qd.indexOf('GST')>=0,'GST still shown on totals');
  ok(!/CEO|Sole Trader/i.test(qd+idoc),'no CEO or Sole Trader wording');
@@ -1193,5 +1193,8 @@ setTimeout(async ()=>{try{
  ok(run("!/km\\)/.test(document.getElementById('suburbSel').innerHTML)") && run("[].some.call(document.querySelectorAll('.suburb-sel'),function(s){return /km\\)/.test(s.innerHTML);})||document.querySelectorAll('.suburb-sel').length===0"),'CLIENT PAGE 1 suburb list has no travel km');
  run("showClientPage(2)"); ok(run("document.getElementById('clientPage1').style.display")==='none','CLIENT page 2 swaps in');
  run("showClientPage(1)");
+ run("confirmReset(false); S.client.first='Addr'; S.services.epoxy=true; addZone('epoxy'); S.epoxyZones[0].area=40; calcAll(); generatePDF();"); var ad=run("window.__doc")+run("invoiceDocHtml('full','INV-2026-099',{ledger:[]}).html");
+ ok(ad.indexOf('Dorretti')<0 && ad.indexOf('Upper Coomera QLD')<0,'HOME ADDRESS not on the quote, contract or invoice');
+ run("closeDocOverlay(); confirmReset(false);");
  ok(errs.length===0,'no window errors '+errs.join('|'));
 }catch(e){console.log('HARNESS ERROR',e.stack);process.exitCode=1;}},300);

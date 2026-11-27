@@ -65,7 +65,7 @@ var PXI = {
     'Company': {
       legalName: 'Poxit Flooring Pty Ltd', abn: '23 702 727 535', acn: '702 727 535',
       bankName: 'Poxit Flooring Pty Ltd', bsb: '067 873', account: '26553862',
-      address: '1/12 Dorretti Circuit, Upper Coomera QLD 4209'
+      address: 'Gold Coast, QLD'
     },
     'Sole Trader': {
       legalName: 'Poxit Flooring', abn: '11 743 009 073', acn: '',
